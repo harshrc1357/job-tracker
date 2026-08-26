@@ -30,7 +30,10 @@ export default async function DashboardPage() {
     .sort((a, b) => a.reminderDueAt!.getTime() - b.reminderDueAt!.getTime())
     .slice(0, 5);
 
-  const recent = all.slice(0, 25);
+  // No arbitrary cap — this is the full pipeline, not a "recent" snippet. The table
+  // itself scrolls internally (see .table-scroll in globals.css) so the page layout
+  // stays put while the list underneath it grows to however many rows exist.
+  const applicationsList = all;
 
   return (
     <>
@@ -79,43 +82,46 @@ export default async function DashboardPage() {
       <div className="grid-2">
         <div className="panel">
           <div className="panel-head">
-            <h2>Recent activity</h2>
+            <h2>All applications</h2>
+            <span className="date">{applicationsList.length} total</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Company / Role</th>
-                <th>Category</th>
-                <th>Received</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <div className="company">{row.company}</div>
-                    <div className="role">{row.role ?? row.subject}</div>
-                  </td>
-                  <td>
-                    <span className={CATEGORY_BADGE_CLASS[row.category as Category] ?? "badge applied"}>
-                      <span className="dot" />
-                      {row.category}
-                    </span>
-                  </td>
-                  <td className="date">{formatDate(row.receivedAt)}</td>
-                  <td className="bell">{reminderLabel(row)}</td>
-                </tr>
-              ))}
-              {recent.length === 0 && (
+          <div className="table-scroll">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={4} className="empty-state">
-                    No emails synced yet — /api/sync hasn't run, or nothing matched.
-                  </td>
+                  <th>Company / Role</th>
+                  <th>Category</th>
+                  <th>Received</th>
+                  <th></th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {applicationsList.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <div className="company">{row.company}</div>
+                      <div className="role">{row.role ?? row.subject}</div>
+                    </td>
+                    <td>
+                      <span className={CATEGORY_BADGE_CLASS[row.category as Category] ?? "badge applied"}>
+                        <span className="dot" />
+                        {row.category}
+                      </span>
+                    </td>
+                    <td className="date">{formatDate(row.receivedAt)}</td>
+                    <td className="bell">{reminderLabel(row)}</td>
+                  </tr>
+                ))}
+                {applicationsList.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="empty-state">
+                      No emails synced yet — /api/sync hasn't run, or nothing matched.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="panel side-card">

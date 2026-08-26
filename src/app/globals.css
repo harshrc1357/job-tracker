@@ -141,11 +141,18 @@ header {
   font-weight: 600;
 }
 
+.table-scroll {
+  max-height: 640px;
+  overflow-y: auto;
+}
 table {
   width: 100%;
   border-collapse: collapse;
 }
 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   text-align: left;
   font-size: 12px;
   text-transform: uppercase;
@@ -154,6 +161,7 @@ th {
   padding: 12px 24px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
+  background: var(--card);
 }
 td {
   padding: 16px 24px;
