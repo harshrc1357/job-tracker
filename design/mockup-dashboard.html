@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Tracker — Dashboard</title>
+<style>
+  :root{
+    --bg: #F7F5F0;
+    --card: #FFFFFF;
+    --ink: #2D2A26;
+    --ink-soft: #6B665F;
+    --border: #E8E4DA;
+    --coral: #C2662D;
+    --coral-soft: #F3E3D3;
+    --green: #3E6B4F;
+    --green-soft: #E1EDE4;
+    --blue: #35597A;
+    --blue-soft: #E1E9F0;
+    --gold: #A9832A;
+    --gold-soft: #F3EAD3;
+    --red: #A23B32;
+    --red-soft: #F3DEDA;
+    --grey: #7A756C;
+    --grey-soft: #ECE9E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family: Inter, -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    width: 1440px;
+    padding: 40px 56px 64px;
+  }
+  header{
+    display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px;
+  }
+  .title-block h1{ font-size:28px; font-weight:700; letter-spacing:-0.02em; }
+  .title-block p{ color:var(--ink-soft); font-size:14px; margin-top:4px; }
+  .status-pill{
+    display:flex; align-items:center; gap:8px;
+    background:var(--card); border:1px solid var(--border); border-radius:999px;
+    padding:8px 16px; font-size:13px; color:var(--ink-soft);
+  }
+  .status-pill .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); }
+  .status-pill + .status-pill{ margin-left:10px; }
+  .status-row{ display:flex; gap:10px; }
+
+  .stats{ display:grid; grid-template-columns:repeat(6,1fr); gap:16px; margin-bottom:32px; }
+  .stat-card{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:20px; box-shadow: 0 1px 2px rgba(30,25,15,0.04);
+  }
+  .stat-card .num{ font-size:28px; font-weight:700; }
+  .stat-card .label{ font-size:13px; color:var(--ink-soft); margin-top:4px; }
+  .stat-card.applied .num{ color:var(--ink); }
+  .stat-card.assessment .num{ color:var(--gold); }
+  .stat-card.interview .num{ color:var(--blue); }
+  .stat-card.offer .num{ color:var(--green); }
+  .stat-card.rejection .num{ color:var(--red); }
+  .stat-card.reminders .num{ color:var(--coral); }
+
+  .panel{
+    background:var(--card); border:1px solid var(--border); border-radius:20px;
+    box-shadow: 0 1px 3px rgba(30,25,15,0.05);
+    overflow:hidden;
+  }
+  .panel-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:20px 24px; border-bottom:1px solid var(--border);
+  }
+  .panel-head h2{ font-size:16px; font-weight:600; }
+  .tabs{ display:flex; gap:6px; }
+  .tab{ padding:6px 14px; border-radius:999px; font-size:13px; color:var(--ink-soft); cursor:pointer; }
+  .tab.active{ background:var(--coral-soft); color:var(--coral); font-weight:600; }
+
+  table{ width:100%; border-collapse:collapse; }
+  th{
+    text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:0.04em;
+    color:var(--ink-soft); padding:12px 24px; border-bottom:1px solid var(--border);
+    font-weight:600;
+  }
+  td{ padding:16px 24px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  .company{ font-weight:600; }
+  .role{ color:var(--ink-soft); font-size:13px; margin-top:2px; }
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px;
+    font-size:12px; font-weight:600;
+  }
+  .badge.applied{ background:var(--grey-soft); color:var(--grey); }
+  .badge.assessment{ background:var(--gold-soft); color:var(--gold); }
+  .badge.interview{ background:var(--blue-soft); color:var(--blue); }
+  .badge.offer{ background:var(--green-soft); color:var(--green); }
+  .badge.rejection{ background:var(--red-soft); color:var(--red); }
+  .badge .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .date{ color:var(--ink-soft); font-size:13px; }
+  .bell{ color:var(--coral); font-size:12px; font-weight:600; }
+
+  .grid-2{ display:grid; grid-template-columns: 2fr 1fr; gap:20px; margin-top:20px; align-items:start; }
+  .side-card{ padding:22px 24px; }
+  .side-card h3{ font-size:14px; font-weight:600; margin-bottom:14px; }
+  .reminder-item{ display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+  .reminder-item:last-child{ border-bottom:none; padding-bottom:0; }
+  .reminder-icon{
+    width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:16px; flex-shrink:0;
+  }
+  .reminder-icon.i{ background:var(--blue-soft); }
+  .reminder-icon.a{ background:var(--gold-soft); }
+  .reminder-icon.o{ background:var(--green-soft); }
+  .reminder-title{ font-size:13px; font-weight:600; }
+  .reminder-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Job Tracker</h1>
+    <p>Auto-sorted from Gmail · synced 4 minutes ago</p>
+  </div>
+  <div class="status-row">
+    <div class="status-pill"><span class="dot"></span> Gmail connected</div>
+    <div class="status-pill"><span class="dot" style="background:var(--coral)"></span> Telegram reminders on</div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat-card applied"><div class="num">42</div><div class="label">Applied</div></div>
+  <div class="stat-card assessment"><div class="num">6</div><div class="label">Assessment</div></div>
+  <div class="stat-card interview"><div class="num">4</div><div class="label">Interview</div></div>
+  <div class="stat-card offer"><div class="num">1</div><div class="label">Offer</div></div>
+  <div class="stat-card rejection"><div class="num">18</div><div class="label">Rejection</div></div>
+  <div class="stat-card reminders"><div class="num">3</div><div class="label">Reminders due</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Recent activity</h2>
+      <div class="tabs">
+        <div class="tab active">All</div>
+        <div class="tab">Interview</div>
+        <div class="tab">Assessment</div>
+        <div class="tab">Offer</div>
+      </div>
+    </div>
+    <table>
+      <tr>
+        <th>Company / Role</th><th>Category</th><th>Received</th><th></th>
+      </tr>
+      <tr>
+        <td><div class="company">Muro AI</div><div class="role">AI Engineer Intern</div></td>
+        <td><span class="badge interview"><span class="dot"></span> Interview</span></td>
+        <td class="date">Today, 9:14 AM</td>
+        <td class="bell">🔔 reminder sent</td>
+      </tr>
+      <tr>
+        <td><div class="company">Anthropic</div><div class="role">Applied Engineer</div></td>
+        <td><span class="badge applied"><span class="dot"></span> Applied</span></td>
+        <td class="date">Yesterday</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><div class="company">Stripe</div><div class="role">Software Engineer</div></td>
+        <td><span class="badge assessment"><span class="dot"></span> Assessment</span></td>
+        <td class="date">Yesterday</td>
+        <td class="bell">🔔 due in 2 days</td>
+      </tr>
+      <tr>
+        <td><div class="company">Datadog</div><div class="role">ML Platform Eng</div></td>
+        <td><span class="badge rejection"><span class="dot"></span> Rejection</span></td>
+        <td class="date">2 days ago</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><div class="company">Ramp</div><div class="role">Backend Engineer</div></td>
+        <td><span class="badge offer"><span class="dot"></span> Offer</span></td>
+        <td class="date">3 days ago</td>
+        <td class="bell">🔔 respond by Fri</td>
+      </tr>
+      <tr>
+        <td><div class="company">Scale AI</div><div class="role">Forward Deployed Eng</div></td>
+        <td><span class="badge applied"><span class="dot"></span> Applied</span></td>
+        <td class="date">4 days ago</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="panel side-card">
+    <h3>Upcoming reminders</h3>
+    <div class="reminder-item">
+      <div class="reminder-icon i">🎙️</div>
+      <div>
+        <div class="reminder-title">Muro AI — interview</div>
+        <div class="reminder-sub">Tomorrow · 2:00 PM · sent to Telegram</div>
+      </div>
+    </div>
+    <div class="reminder-item">
+      <div class="reminder-icon a">📝</div>
+      <div>
+        <div class="reminder-title">Stripe — assessment due</div>
+        <div class="reminder-sub">In 2 days · reminder queued</div>
+      </div>
+    </div>
+    <div class="reminder-item">
+      <div class="reminder-icon o">🎉</div>
+      <div>
+        <div class="reminder-title">Ramp — offer response</div>
+        <div class="reminder-sub">Respond by Friday</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

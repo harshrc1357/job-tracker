@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Tracker — Pipeline</title>
+<style>
+  :root{
+    --bg: #F7F5F0;
+    --card: #FFFFFF;
+    --ink: #2D2A26;
+    --ink-soft: #6B665F;
+    --border: #E8E4DA;
+    --coral: #C2662D;
+    --coral-soft: #F3E3D3;
+    --green: #3E6B4F;
+    --green-soft: #E1EDE4;
+    --blue: #35597A;
+    --blue-soft: #E1E9F0;
+    --gold: #A9832A;
+    --gold-soft: #F3EAD3;
+    --red: #A23B32;
+    --red-soft: #F3DEDA;
+    --grey: #7A756C;
+    --grey-soft: #ECE9E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family: Inter, -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    width: 1440px;
+    padding: 40px 56px 64px;
+  }
+  header{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; }
+  .title-block h1{ font-size:28px; font-weight:700; letter-spacing:-0.02em; }
+  .title-block p{ color:var(--ink-soft); font-size:14px; margin-top:4px; }
+  .toolbar{ display:flex; gap:10px; align-items:center; }
+  .search{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:9px 14px; font-size:13px; color:var(--ink-soft); width:220px;
+  }
+  .status-pill{
+    display:flex; align-items:center; gap:8px;
+    background:var(--card); border:1px solid var(--border); border-radius:999px;
+    padding:8px 16px; font-size:13px; color:var(--ink-soft);
+  }
+  .status-pill .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); }
+
+  .board{ display:grid; grid-template-columns: repeat(5, 1fr); gap:16px; }
+  .col{ display:flex; flex-direction:column; }
+  .col-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 6px 14px;
+  }
+  .col-head h3{ font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; }
+  .col-head .count{
+    background:var(--grey-soft); color:var(--ink-soft); font-size:12px; font-weight:600;
+    border-radius:999px; padding:2px 9px;
+  }
+  .col.applied .col-head h3{ color:var(--grey); }
+  .col.assessment .col-head h3{ color:var(--gold); }
+  .col.interview .col-head h3{ color:var(--blue); }
+  .col.offer .col-head h3{ color:var(--green); }
+  .col.rejection .col-head h3{ color:var(--red); }
+
+  .col-bar{ height:3px; border-radius:3px; margin-bottom:14px; }
+  .col.applied .col-bar{ background:var(--grey); }
+  .col.assessment .col-bar{ background:var(--gold); }
+  .col.interview .col-bar{ background:var(--blue); }
+  .col.offer .col-bar{ background:var(--green); }
+  .col.rejection .col-bar{ background:var(--red); }
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:16px; margin-bottom:12px; box-shadow: 0 1px 2px rgba(30,25,15,0.04);
+  }
+  .card .company{ font-weight:700; font-size:14px; }
+  .card .role{ color:var(--ink-soft); font-size:13px; margin-top:2px; }
+  .card .meta{
+    display:flex; justify-content:space-between; align-items:center; margin-top:12px;
+  }
+  .card .date{ font-size:11px; color:var(--ink-soft); }
+  .card .reminder{
+    font-size:11px; font-weight:600; color:var(--coral);
+    background:var(--coral-soft); padding:3px 8px; border-radius:999px;
+  }
+  .card.ghost{
+    border-style:dashed; color:var(--ink-soft); text-align:center; font-size:13px;
+    padding:24px 16px; box-shadow:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Job Tracker</h1>
+    <p>Pipeline view · 71 applications tracked</p>
+  </div>
+  <div class="toolbar">
+    <div class="search">Search company or role…</div>
+    <div class="status-pill"><span class="dot"></span> Gmail · Telegram synced</div>
+  </div>
+</header>
+
+<div class="board">
+
+  <div class="col applied">
+    <div class="col-head"><h3>Applied</h3><span class="count">42</span></div>
+    <div class="col-bar"></div>
+    <div class="card">
+      <div class="company">Scale AI</div>
+      <div class="role">Forward Deployed Engineer</div>
+      <div class="meta"><span class="date">4 days ago</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Anthropic</div>
+      <div class="role">Applied AI Engineer</div>
+      <div class="meta"><span class="date">Yesterday</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Notion</div>
+      <div class="role">AI Product Eng</div>
+      <div class="meta"><span class="date">5 days ago</span></div>
+    </div>
+  </div>
+
+  <div class="col assessment">
+    <div class="col-head"><h3>Assessment</h3><span class="count">6</span></div>
+    <div class="col-bar"></div>
+    <div class="card">
+      <div class="company">Stripe</div>
+      <div class="role">Software Engineer</div>
+      <div class="meta"><span class="date">Yesterday</span><span class="reminder">due in 2d</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Datadog</div>
+      <div class="role">ML Platform Eng</div>
+      <div class="meta"><span class="date">3 days ago</span></div>
+    </div>
+  </div>
+
+  <div class="col interview">
+    <div class="col-head"><h3>Interview</h3><span class="count">4</span></div>
+    <div class="col-bar"></div>
+    <div class="card">
+      <div class="company">Muro AI</div>
+      <div class="role">AI Engineer Intern</div>
+      <div class="meta"><span class="date">Today</span><span class="reminder">tomorrow 2pm</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Rippling</div>
+      <div class="role">AI Infra Engineer</div>
+      <div class="meta"><span class="date">2 days ago</span></div>
+    </div>
+  </div>
+
+  <div class="col offer">
+    <div class="col-head"><h3>Offer</h3><span class="count">1</span></div>
+    <div class="col-bar"></div>
+    <div class="card">
+      <div class="company">Ramp</div>
+      <div class="role">Backend Engineer</div>
+      <div class="meta"><span class="date">3 days ago</span><span class="reminder">respond Fri</span></div>
+    </div>
+    <div class="card ghost">Waiting on the next one</div>
+  </div>
+
+  <div class="col rejection">
+    <div class="col-head"><h3>Rejection</h3><span class="count">18</span></div>
+    <div class="col-bar"></div>
+    <div class="card">
+      <div class="company">Coinbase</div>
+      <div class="role">ML Engineer</div>
+      <div class="meta"><span class="date">1 day ago</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Databricks</div>
+      <div class="role">AI Platform Eng</div>
+      <div class="meta"><span class="date">2 days ago</span></div>
+    </div>
+    <div class="card">
+      <div class="company">Snowflake</div>
+      <div class="role">Solutions Eng</div>
+      <div class="meta"><span class="date">4 days ago</span></div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
