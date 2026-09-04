@@ -68,9 +68,12 @@ const SYSTEM_PROMPT = `You classify job-application-related emails into exactly 
   ", "
 )}. Reply with only the category word and nothing else. If the email is not related to a job application at all, reply with "Skip".`;
 
+// Throws if the Groq call itself fails (bad key, model gone, network) — that's a
+// distinct case from "model answered but not with a recognized category word",
+// which is a legitimate Skip. Caller (sync/route.ts) decides what a failed call
+// means for that message.
 export async function llmClassify(subject: string, snippet: string): Promise<Category | "Skip"> {
   const raw = await groqComplete(SYSTEM_PROMPT, `Subject: ${subject}\nSnippet: ${snippet}`, 5);
-  if (!raw) return "Skip";
   if (isCategory(raw)) return raw;
   return "Skip";
 }
