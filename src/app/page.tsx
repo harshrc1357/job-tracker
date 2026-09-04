@@ -1,7 +1,9 @@
 import { db, isDbConfigured } from "@/db/client";
 import { applications } from "@/db/schema";
 import { desc } from "drizzle-orm";
-import { CATEGORIES, CATEGORY_BADGE_CLASS, type Category } from "@/lib/categories";
+import { CATEGORIES, type Category } from "@/lib/categories";
+import { REMINDER_WINDOW_HOURS } from "@/lib/constants";
+import { ApplicationsPanel } from "./ApplicationsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,16 +26,21 @@ export default async function DashboardPage() {
     if (row.category in counts) counts[row.category as Category]++;
   }
 
+  // "Upcoming" means due within the reminder window (see REMINDER_WINDOW_HOURS) —
+  // matches what the sync cron itself considers "coming up" when it decides
+  // whether to send the Telegram nudge, so the dashboard never shows something as
+  // upcoming that the bot wouldn't also be about to ping about.
   const now = Date.now();
+  const windowEnd = now + REMINDER_WINDOW_HOURS * 60 * 60 * 1000;
   const upcoming = all
-    .filter((row) => row.reminderDueAt && !row.reminderSent && row.reminderDueAt.getTime() > now)
-    .sort((a, b) => a.reminderDueAt!.getTime() - b.reminderDueAt!.getTime())
-    .slice(0, 5);
-
-  // No arbitrary cap — this is the full pipeline, not a "recent" snippet. The table
-  // itself scrolls internally (see .table-scroll in globals.css) so the page layout
-  // stays put while the list underneath it grows to however many rows exist.
-  const applicationsList = all;
+    .filter(
+      (row) =>
+        row.reminderDueAt &&
+        !row.reminderSent &&
+        row.reminderDueAt.getTime() > now &&
+        row.reminderDueAt.getTime() <= windowEnd,
+    )
+    .sort((a, b) => a.reminderDueAt!.getTime() - b.reminderDueAt!.getTime());
 
   return (
     <>
@@ -49,6 +56,19 @@ export default async function DashboardPage() {
           <div className="status-pill">
             <span className="dot" style={{ background: "var(--coral)" }} /> Telegram reminders on
           </div>
+          <a
+            href="/api/auth/logout"
+            style={{
+              fontSize: 13,
+              color: "var(--ink-soft)",
+              border: "1px solid var(--border)",
+              borderRadius: 999,
+              padding: "6px 14px",
+              textDecoration: "none",
+            }}
+          >
+            Log out
+          </a>
         </div>
       </header>
 
@@ -79,74 +99,41 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>All applications</h2>
-            <span className="date">{applicationsList.length} total</span>
+      <div className="stack-y">
+        {all.length === 0 ? (
+          <div className="panel">
+            <div className="empty-state">No emails synced yet — /api/sync hasn't run, or nothing matched.</div>
           </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Company / Role</th>
-                  <th>Category</th>
-                  <th>Received</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {applicationsList.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <div className="company">{row.company}</div>
-                      <div className="role">{row.role ?? row.subject}</div>
-                    </td>
-                    <td>
-                      <span className={CATEGORY_BADGE_CLASS[row.category as Category] ?? "badge applied"}>
-                        <span className="dot" />
-                        {row.category}
-                      </span>
-                    </td>
-                    <td className="date">{formatDate(row.receivedAt)}</td>
-                    <td className="bell">{reminderLabel(row)}</td>
-                  </tr>
-                ))}
-                {applicationsList.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="empty-state">
-                      No emails synced yet — /api/sync hasn't run, or nothing matched.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        ) : (
+          <ApplicationsPanel applications={all} />
+        )}
 
         <div className="panel side-card">
           <h3>Upcoming reminders</h3>
-          {upcoming.length === 0 && <p className="empty-state">Nothing due in the next 24 hours.</p>}
-          {upcoming.map((row) => (
-            <div className="reminder-item" key={row.id}>
-              <div className={`reminder-icon ${iconClass(row.category as Category)}`}>{icon(row.category as Category)}</div>
-              <div>
-                <div className="reminder-title">
-                  {row.company} — {row.category.toLowerCase()}
+          {upcoming.length === 0 && (
+            <p className="empty-state">Nothing due in the next {REMINDER_WINDOW_HOURS} hours.</p>
+          )}
+          {upcoming.length > 0 && (
+            <div className="reminders-grid">
+              {upcoming.map((row) => (
+                <div className="reminder-item" key={row.id}>
+                  <div className={`reminder-icon ${iconClass(row.category as Category)}`}>
+                    {icon(row.category as Category)}
+                  </div>
+                  <div>
+                    <div className="reminder-title">
+                      {row.company} — {row.category.toLowerCase()}
+                    </div>
+                    <div className="reminder-sub">{row.reminderDueAt ? formatDate(row.reminderDueAt) : ""}</div>
+                  </div>
                 </div>
-                <div className="reminder-sub">{row.reminderDueAt ? formatDate(row.reminderDueAt) : ""}</div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </>
   );
-}
-
-function reminderLabel(row: Row): string {
-  if (!row.reminderDueAt) return "";
-  return row.reminderSent ? "🔔 reminder sent" : "🔔 pending";
 }
 
 function iconClass(category: Category): string {

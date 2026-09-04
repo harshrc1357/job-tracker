@@ -1,0 +1,9 @@
+node_modules
+.next
+.next-stale-*
+*.tsbuildinfo
+.env
+.env.local
+*.png
+.git
+.playwright-mcp

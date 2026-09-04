@@ -9,6 +9,16 @@ export const applications = pgTable("applications", {
   category: text("category").notNull(), // Applied | Assessment | Interview | Offer | Rejection | Reminder
   subject: text("subject"),
   snippet: text("snippet"),
+  // Plain-text fallback (the text/plain part, or HTML with tags stripped if that's
+  // all the sender sent) — used only when bodyHtml isn't available.
+  body: text("body"),
+  // Sanitized text/html part, decoded from Gmail as-is (fonts, links, spacing,
+  // logos) and rendered in a sandboxed iframe so the dashboard shows the email
+  // the way Gmail does, not a flattened wall of text. Sanitized at sync time with
+  // sanitize-html (src/lib/sanitizeEmailHtml.ts) — scripts and event handlers are
+  // stripped before this ever reaches the database.
+  bodyHtml: text("body_html"),
+  fromEmail: text("from_email"),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
   reminderDueAt: timestamp("reminder_due_at", { withTimezone: true }),
   reminderSent: boolean("reminder_sent").notNull().default(false),

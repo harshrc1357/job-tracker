@@ -229,6 +229,12 @@ tr:last-child td {
   font-weight: 600;
 }
 
+.stack-y {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -243,15 +249,208 @@ tr:last-child td {
   font-weight: 600;
   margin-bottom: 14px;
 }
+
+/* Category filter pills in a panel-head, e.g. "All / Applied / Interview ...".
+   Matches design/mockup-dashboard.html, which sketched this but never got wired
+   up to anything until the applications panel below started using it. */
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+.tab:hover:not(.active) {
+  background: var(--grey-soft);
+}
+.tab.active {
+  background: var(--coral-soft);
+  color: var(--coral);
+  font-weight: 600;
+}
+
+/* Two-pane list + detail view, the same shape as clicking an email in a normal
+   inbox. .split-list is the scrollable left rail, .split-detail is the reading
+   pane on the right. */
+.split-view {
+  display: flex;
+  height: 640px;
+}
+.split-list {
+  width: 340px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.split-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  align-items: flex-start;
+}
+.split-item:hover {
+  background: var(--bg);
+}
+.split-item.active {
+  background: var(--coral-soft);
+}
+.split-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+  background: var(--grey-soft);
+  color: var(--grey);
+}
+.split-avatar.assessment {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+.split-avatar.interview {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.split-avatar.offer {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.split-avatar.rejection {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.split-avatar.reminder {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+.split-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.split-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.split-item-top .company {
+  font-weight: 600;
+  font-size: 14px;
+}
+.split-item-top .date {
+  flex-shrink: 0;
+}
+.split-item .role {
+  margin-top: 1px;
+}
+.split-item .snippet {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.split-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-align: center;
+}
+.detail-head {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-head h3 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 12px;
+}
+.detail-meta {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.detail-meta .from {
+  color: var(--ink);
+  font-weight: 600;
+}
+.detail-body {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+/* The sandboxed email-content iframe (see EmailHtmlFrame in ApplicationsPanel.tsx).
+   Fixed height + its own scrollbar, same "bounded panel, internal scroll" pattern
+   as .split-list and the old .table-scroll — the email can be any length, the
+   surrounding layout doesn't move. */
+.email-frame {
+  width: 100%;
+  height: 560px;
+  border: none;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .split-view {
+    flex-direction: column;
+    height: auto;
+  }
+  .split-list {
+    width: 100%;
+    max-height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .split-detail {
+    max-height: 480px;
+  }
+}
+
+/* Upcoming reminders now gets its own full-width panel instead of a narrow
+   sidebar squeezed next to the applications table, so cards lay out in a
+   responsive grid rather than a single cramped column. */
+.reminders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
 .reminder-item {
   display: flex;
   gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-}
-.reminder-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 .reminder-icon {
   width: 36px;
@@ -286,4 +485,84 @@ tr:last-child td {
   font-size: 13px;
   text-align: center;
   padding: 40px 0;
+}
+
+.login-shell {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(30, 25, 15, 0.05);
+  padding: 40px 36px;
+  text-align: center;
+}
+.login-mark {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 20px;
+  border-radius: 14px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+.login-card h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.login-card > p.login-sub {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-google:hover {
+  border-color: var(--coral);
+  box-shadow: 0 1px 2px rgba(30, 25, 15, 0.06);
+}
+.login-foot {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--ink-soft);
 }
