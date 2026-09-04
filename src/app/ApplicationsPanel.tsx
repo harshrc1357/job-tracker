@@ -24,6 +24,8 @@ function avatarClass(category: string): string {
       return "split-avatar rejection";
     case "Reminder":
       return "split-avatar reminder";
+    case "Verification":
+      return "split-avatar verification";
     default:
       return "split-avatar";
   }

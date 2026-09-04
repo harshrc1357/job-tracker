@@ -6,7 +6,8 @@ export const applications = pgTable("applications", {
   gmailMessageId: text("gmail_message_id").notNull().unique(),
   company: text("company").notNull(),
   role: text("role"),
-  category: text("category").notNull(), // Applied | Assessment | Interview | Offer | Rejection | Reminder
+  // Applied | Assessment | Interview | Offer | Rejection | Reminder | Verification
+  category: text("category").notNull(),
   subject: text("subject"),
   snippet: text("snippet"),
   // Plain-text fallback (the text/plain part, or HTML with tags stripped if that's
@@ -21,6 +22,15 @@ export const applications = pgTable("applications", {
   fromEmail: text("from_email"),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
   reminderDueAt: timestamp("reminder_due_at", { withTimezone: true }),
+  // Reminders repeat rather than fire once: every REMINDER_INTERVAL_HOURS until
+  // MAX_REMINDERS_PER_APPLICATION is hit or the event passes.
+  // - reminderCount  how many have gone out so far (hard cap enforced against this)
+  // - lastReminderAt when the last one went out, so the cron can space them
+  // - reminderSent   the loop is finished for this row: cap reached, or due date
+  //                  passed. Kept as the single "stop asking" flag so the query
+  //                  can skip finished rows cheaply.
+  reminderCount: integer("reminder_count").notNull().default(0),
+  lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
   reminderSent: boolean("reminder_sent").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

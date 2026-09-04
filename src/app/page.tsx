@@ -1,8 +1,8 @@
 import { db, isDbConfigured } from "@/db/client";
 import { applications } from "@/db/schema";
 import { desc } from "drizzle-orm";
-import { CATEGORIES, type Category } from "@/lib/categories";
-import { REMINDER_WINDOW_HOURS } from "@/lib/constants";
+import { CATEGORIES, isReminderCategory, type Category } from "@/lib/categories";
+import { MAX_REMINDERS_PER_APPLICATION, REMINDER_WINDOW_HOURS } from "@/lib/constants";
 import { ApplicationsPanel } from "./ApplicationsPanel";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +26,10 @@ export default async function DashboardPage() {
     if (row.category in counts) counts[row.category as Category]++;
   }
 
-  // "Upcoming" means due within the reminder window (see REMINDER_WINDOW_HOURS) —
-  // matches what the sync cron itself considers "coming up" when it decides
-  // whether to send the Telegram nudge, so the dashboard never shows something as
-  // upcoming that the bot wouldn't also be about to ping about.
+  // "Upcoming" means due within the reminder window (see REMINDER_WINDOW_HOURS) and
+  // in a category the bot actually nudges about (Interview, Assessment, Offer) —
+  // mirrors the sync cron's own second pass exactly, so the dashboard never shows
+  // something as upcoming that the bot wouldn't also be about to ping about.
   const now = Date.now();
   const windowEnd = now + REMINDER_WINDOW_HOURS * 60 * 60 * 1000;
   const upcoming = all
@@ -37,6 +37,7 @@ export default async function DashboardPage() {
       (row) =>
         row.reminderDueAt &&
         !row.reminderSent &&
+        isReminderCategory(row.category) &&
         row.reminderDueAt.getTime() > now &&
         row.reminderDueAt.getTime() <= windowEnd,
     )
@@ -93,6 +94,10 @@ export default async function DashboardPage() {
           <div className="num">{counts.Rejection}</div>
           <div className="label">Rejection</div>
         </div>
+        <div className="stat-card verification">
+          <div className="num">{counts.Verification}</div>
+          <div className="label">Verification</div>
+        </div>
         <div className="stat-card reminders">
           <div className="num">{upcoming.length}</div>
           <div className="label">Reminders due</div>
@@ -124,7 +129,10 @@ export default async function DashboardPage() {
                     <div className="reminder-title">
                       {row.company} — {row.category.toLowerCase()}
                     </div>
-                    <div className="reminder-sub">{row.reminderDueAt ? formatDate(row.reminderDueAt) : ""}</div>
+                    <div className="reminder-sub">
+                      {row.reminderDueAt ? formatDate(row.reminderDueAt) : ""}
+                      {` · ${row.reminderCount}/${MAX_REMINDERS_PER_APPLICATION} sent`}
+                    </div>
                   </div>
                 </div>
               ))}

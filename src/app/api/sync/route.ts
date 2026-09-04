@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { gmail_v1 } from "googleapis";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getGmailClient } from "@/lib/gmail";
 import { db } from "@/db/client";
 import { applications } from "@/db/schema";
 import { classifyEmail } from "@/lib/classify";
 import { extractDueDate } from "@/lib/extractDueDate";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { EXTRACT_DUE_DATE_FOR, NOTIFY_ON_ARRIVAL, type Category } from "@/lib/categories";
-import { REMINDER_WINDOW_HOURS } from "@/lib/constants";
+import {
+  EXTRACT_DUE_DATE_FOR,
+  NOTIFY_ON_ARRIVAL,
+  REMINDER_CATEGORIES,
+  type Category,
+} from "@/lib/categories";
+import {
+  MAX_REMINDERS_PER_APPLICATION,
+  REMINDER_INTERVAL_HOURS,
+  REMINDER_WINDOW_HOURS,
+} from "@/lib/constants";
 import { sanitizeEmailHtml } from "@/lib/sanitizeEmailHtml";
 
 export const runtime = "nodejs";
@@ -16,8 +25,17 @@ export const maxDuration = 60;
 
 // Cast a slightly wide net — the classifier (keyword rules + LLM fallback) is the real
 // filter. This query just keeps Gmail from handing back the entire inbox.
+//
+// Rolling window, not an absolute date range: an `after:/before:` pair goes stale the
+// moment the clock passes it, and the sync then silently returns zero new mail forever.
+// Deduping happens against gmail_message_id, so re-scanning the same fortnight every
+// run is cheap and means a message that failed mid-batch gets picked back up.
+const LOOKBACK_DAYS = 14;
 const JOB_QUERY =
-  'newer_than:2d (application OR interview OR assessment OR offer OR "thank you for applying" OR recruiting OR careers OR hiring)';
+  `newer_than:${LOOKBACK_DAYS}d ` +
+  '(application OR interview OR assessment OR offer OR "thank you for applying" OR ' +
+  'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
+  '"security code" OR "verify your email" OR "confirm your email")';
 
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
@@ -29,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const gmail = await getGmailClient();
-    const list = await gmail.users.messages.list({ userId: "me", q: JOB_QUERY, maxResults: 25 });
+    const list = await gmail.users.messages.list({ userId: "me", q: JOB_QUERY, maxResults: 500 });
     const messages = list.data.messages ?? [];
     result.checked = messages.length;
 
@@ -99,23 +117,70 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Second pass: anything with a known due date inside the reminder window that
-    // hasn't been re-pinged yet gets a "coming up" reminder.
-    const dueSoonCutoff = new Date(Date.now() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
+    // Second pass: repeating "coming up" reminders. Only Interview, Assessment and
+    // Offer rows are eligible (REMINDER_CATEGORIES) — Applied, Rejection, Reminder
+    // and Verification emails never nudge. Each eligible row pings once every
+    // REMINDER_INTERVAL_HOURS, up to MAX_REMINDERS_PER_APPLICATION times, then stops
+    // for good. `reminderSent` is the terminal flag: cap reached, or event passed.
+    const now = new Date();
+    const dueSoonCutoff = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
+    const intervalMs = REMINDER_INTERVAL_HOURS * 60 * 60 * 1000;
+
     const pending = await db
       .select()
       .from(applications)
-      .where(and(isNotNull(applications.reminderDueAt), eq(applications.reminderSent, false)));
+      .where(
+        and(
+          isNotNull(applications.reminderDueAt),
+          eq(applications.reminderSent, false),
+          inArray(applications.category, REMINDER_CATEGORIES)
+        )
+      );
 
     for (const app of pending) {
       if (!app.reminderDueAt) continue;
-      if (app.reminderDueAt > dueSoonCutoff || app.reminderDueAt < new Date()) continue;
 
-      await sendTelegramMessage(
-        `⏰ *${app.category} coming up* — ${app.company}\n${app.subject}\nDue: ${app.reminderDueAt.toLocaleString()}`
-      );
-      await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
-      result.remindersSent++;
+      // Event is in the past: nothing left to remind about, close the row out.
+      if (app.reminderDueAt <= now) {
+        await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
+        continue;
+      }
+
+      // Still further out than the window — leave it for a later run.
+      if (app.reminderDueAt > dueSoonCutoff) continue;
+
+      // Cap already hit (belt and braces; the update below closes the row too).
+      if (app.reminderCount >= MAX_REMINDERS_PER_APPLICATION) {
+        await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
+        continue;
+      }
+
+      // Not enough time since the last nudge.
+      if (app.lastReminderAt && now.getTime() - app.lastReminderAt.getTime() < intervalMs) continue;
+
+      // A failed Telegram send must not abort the rest of the batch, and must not
+      // bump the counter either — the row stays eligible for the next cron pass.
+      const nextCount = app.reminderCount + 1;
+      try {
+        await sendTelegramMessage(
+          `⏰ *${app.category} coming up* — ${app.company}\n${app.subject}\n` +
+            `Due: ${app.reminderDueAt.toLocaleString()}\n` +
+            `_Reminder ${nextCount} of ${MAX_REMINDERS_PER_APPLICATION}_`
+        );
+        await db
+          .update(applications)
+          .set({
+            reminderCount: nextCount,
+            lastReminderAt: now,
+            reminderSent: nextCount >= MAX_REMINDERS_PER_APPLICATION,
+          })
+          .where(eq(applications.id, app.id));
+        result.remindersSent++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`reminder ${app.id}: ${msg}`);
+        console.error("[sync] reminder failed for application", app.id, err);
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

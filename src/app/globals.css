@@ -18,6 +18,8 @@
   --violet-soft: #e9e3f2;
   --grey: #7a756c;
   --grey-soft: #ece9e2;
+  --teal: #2f6b6b;
+  --teal-soft: #dcecea;
 }
 
 * {
@@ -78,7 +80,7 @@ header {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 16px;
   margin-bottom: 32px;
 }
@@ -120,6 +122,9 @@ header {
 }
 .stat-card.reminders .num {
   color: var(--coral);
+}
+.stat-card.verification .num {
+  color: var(--teal);
 }
 
 .panel {
@@ -212,6 +217,10 @@ tr:last-child td {
 .badge.reminder {
   background: var(--violet-soft);
   color: var(--violet);
+}
+.badge.verification {
+  background: var(--teal-soft);
+  color: var(--teal);
 }
 .badge .dot {
   width: 6px;
@@ -336,6 +345,10 @@ tr:last-child td {
 .split-avatar.reminder {
   background: var(--violet-soft);
   color: var(--violet);
+}
+.split-avatar.verification {
+  background: var(--teal-soft);
+  color: var(--teal);
 }
 .split-item-body {
   flex: 1;
