@@ -31,6 +31,15 @@ function avatarClass(category: string): string {
   }
 }
 
+// Which fields a search term is tested against. `body` is included so searching a
+// role title or a recruiter's name finds the email even when neither appears in the
+// subject line, which for ATS mail is most of the time. Plain substring matching on
+// a list the server already sent — 100-odd rows is nowhere near needing an index.
+function matchesQuery(row: Row, needle: string): boolean {
+  const haystacks = [row.company, row.role, row.subject, row.snippet, row.fromEmail, row.body];
+  return haystacks.some((field) => field?.toLowerCase().includes(needle));
+}
+
 function initials(company: string): string {
   return company.trim().slice(0, 2).toUpperCase() || "?";
 }
@@ -83,17 +92,27 @@ function EmailHtmlFrame({ html }: { html: string }) {
 export function ApplicationsPanel({ applications: rows }: { applications: Row[] }) {
   const [activeTab, setActiveTab] = useState<Tab>("All");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+
+  // Search runs before the category filter, so the tab counts always describe what
+  // you'd actually get by clicking that tab with the current query in the box —
+  // rather than advertising 83 Applied and then showing you two.
+  const searched = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => matchesQuery(row, needle));
+  }, [rows, query]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { All: rows.length };
+    const c: Record<string, number> = { All: searched.length };
     for (const cat of CATEGORIES) c[cat] = 0;
-    for (const row of rows) c[row.category] = (c[row.category] ?? 0) + 1;
+    for (const row of searched) c[row.category] = (c[row.category] ?? 0) + 1;
     return c;
-  }, [rows]);
+  }, [searched]);
 
   const filtered = useMemo(
-    () => (activeTab === "All" ? rows : rows.filter((row) => row.category === activeTab)),
-    [rows, activeTab],
+    () => (activeTab === "All" ? searched : searched.filter((row) => row.category === activeTab)),
+    [searched, activeTab],
   );
 
   const selected = filtered.find((row) => row.id === selectedId) ?? null;
@@ -107,23 +126,60 @@ export function ApplicationsPanel({ applications: rows }: { applications: Row[] 
     <div className="panel">
       <div className="panel-head">
         <h2>All applications</h2>
-        <div className="tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`tab ${activeTab === tab ? "active" : ""}`}
-              onClick={() => selectTab(tab)}
-            >
-              {tab} ({counts[tab] ?? 0})
-            </button>
-          ))}
+        <div className="head-controls">
+          <div className="search-box">
+            <span className="search-icon" aria-hidden="true">
+              ⌕
+            </span>
+            <input
+              type="search"
+              className="search-input"
+              placeholder="Search company, subject, sender…"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelectedId(null);
+              }}
+              aria-label="Search emails"
+            />
+            {query && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => {
+                  setQuery("");
+                  setSelectedId(null);
+                }}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`tab ${activeTab === tab ? "active" : ""}`}
+                onClick={() => selectTab(tab)}
+              >
+                {tab} ({counts[tab] ?? 0})
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="split-view">
         <div className="split-list">
-          {filtered.length === 0 && <div className="empty-state">No emails in this category yet.</div>}
+          {filtered.length === 0 && (
+            <div className="empty-state">
+              {query.trim()
+                ? `Nothing matches “${query.trim()}”${activeTab === "All" ? "" : ` in ${activeTab}`}.`
+                : "No emails in this category yet."}
+            </div>
+          )}
           {filtered.map((row) => (
             <div
               key={row.id}

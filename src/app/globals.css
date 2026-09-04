@@ -259,6 +259,66 @@ tr:last-child td {
   margin-bottom: 14px;
 }
 
+/* Search box + category pills share the right-hand side of the panel head. They
+   wrap onto their own lines on a narrow screen rather than squeezing the title. */
+.head-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  min-width: 240px;
+}
+.search-box:focus-within {
+  border-color: var(--coral);
+  background: var(--card);
+}
+.search-icon {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1;
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.search-input::placeholder {
+  color: var(--ink-soft);
+}
+/* Chrome renders its own clear affordance on type="search" — hide it, we ship one
+   that matches the rest of the palette. */
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-clear {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  font-family: inherit;
+}
+.search-clear:hover {
+  color: var(--ink);
+}
+
 /* Category filter pills in a panel-head, e.g. "All / Applied / Interview ...".
    Matches design/mockup-dashboard.html, which sketched this but never got wired
    up to anything until the applications panel below started using it. */
