@@ -3,8 +3,8 @@ import type { gmail_v1 } from "googleapis";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getGmailClient } from "@/lib/gmail";
 import { db } from "@/db/client";
-import { applications } from "@/db/schema";
-import { classifyEmail } from "@/lib/classify";
+import { applications, ignoredMessages } from "@/db/schema";
+import { keywordClassify, llmClassify } from "@/lib/classify";
 import { extractDueDate } from "@/lib/extractDueDate";
 import { escapeMarkdownV2, sendTelegramMessage, trySendTelegramMessage } from "@/lib/telegram";
 import {
@@ -14,6 +14,7 @@ import {
   type Category,
 } from "@/lib/categories";
 import {
+  LLM_CALLS_PER_RUN,
   MAX_REMINDERS_PER_APPLICATION,
   SYNC_CONCURRENCY,
   SYNC_TIME_BUDGET_MS,
@@ -46,16 +47,24 @@ type SyncResult = {
   alreadyStored: number;
   processed: number;
   inserted: number;
+  ignored: number;
+  llmCalls: number;
   remindersSent: number;
   remaining: number;
   ranOutOfTime: boolean;
+  hitLlmBudget: boolean;
   errors: string[];
 };
 
 // What one message turned into. Kept as data rather than as a direct db.insert so the
 // fetch/classify work can run concurrently while the writes stay ordered and cheap.
 type MessageOutcome =
-  | { status: "skip" }
+  // Classified as not job-related. Recorded in ignored_messages so it is never
+  // fetched or classified again.
+  | { status: "ignore"; messageId: string }
+  // Needed an LLM call but the run's budget was spent. Left completely untouched so
+  // the next tick picks it up.
+  | { status: "defer" }
   | { status: "error"; message: string }
   | { status: "store"; values: typeof applications.$inferInsert; notify: boolean };
 
@@ -73,11 +82,18 @@ export async function GET(req: NextRequest) {
     alreadyStored: 0,
     processed: 0,
     inserted: 0,
+    ignored: 0,
+    llmCalls: 0,
     remindersSent: 0,
     remaining: 0,
     ranOutOfTime: false,
+    hitLlmBudget: false,
     errors: [],
   };
+
+  // Shared across the whole run. Handed to processMessage so concurrent workers draw
+  // from one pool rather than each getting their own allowance.
+  const llmBudget = { remaining: LLM_CALLS_PER_RUN, used: 0 };
 
   try {
     const gmail = await getGmailClient();
@@ -92,13 +108,19 @@ export async function GET(req: NextRequest) {
     // One query for every id we already hold, instead of a SELECT per message. At a
     // 14-day window that was 100+ sequential database round trips per run before any
     // real work started, and it is most of why every run was hitting the 60s wall.
-    const stored = await db
-      .select({ gmailMessageId: applications.gmailMessageId })
-      .from(applications);
-    const storedIds = new Set(stored.map((row) => row.gmailMessageId));
+    const [stored, ignored] = await Promise.all([
+      db.select({ gmailMessageId: applications.gmailMessageId }).from(applications),
+      db.select({ gmailMessageId: ignoredMessages.gmailMessageId }).from(ignoredMessages),
+    ]);
+    // Ignored ids count as "seen" exactly like stored ones. That is the whole point:
+    // a message judged not-job-related must never cost a second LLM call.
+    const seenIds = new Set([
+      ...stored.map((row) => row.gmailMessageId),
+      ...ignored.map((row) => row.gmailMessageId),
+    ]);
 
     const fresh = messages.flatMap((message) =>
-      message.id && !storedIds.has(message.id) ? [message.id] : []
+      message.id && !seenIds.has(message.id) ? [message.id] : []
     );
     result.alreadyStored = messages.length - fresh.length;
 
@@ -113,16 +135,35 @@ export async function GET(req: NextRequest) {
       }
 
       const batch = fresh.slice(offset, offset + SYNC_CONCURRENCY);
-      const outcomes = await Promise.all(batch.map((id) => processMessage(gmail, id)));
+      const outcomes = await Promise.all(batch.map((id) => processMessage(gmail, id, llmBudget)));
       result.processed += batch.length;
+      result.llmCalls = llmBudget.used;
 
       for (const outcome of outcomes) {
         if (outcome.status === "error") result.errors.push(outcome.message);
       }
 
+      // Record the skips before anything else. If the run dies after this point the
+      // work is still banked, which is what stops the treadmill restarting.
+      const toIgnore = outcomes.flatMap((outcome) =>
+        outcome.status === "ignore" ? [{ gmailMessageId: outcome.messageId }] : []
+      );
+      if (toIgnore.length > 0) {
+        await db.insert(ignoredMessages).values(toIgnore).onConflictDoNothing();
+        result.ignored += toIgnore.length;
+      }
+
+      // Budget spent mid-batch: everything after this needs an LLM call we cannot
+      // make, so stop cleanly rather than logging one 429 per remaining message.
+      if (llmBudget.remaining <= 0 && outcomes.some((o) => o.status === "defer")) {
+        result.hitLlmBudget = true;
+      }
+
       const toStore = outcomes.flatMap((outcome) =>
         outcome.status === "store" ? [outcome] : []
       );
+
+      if (result.hitLlmBudget && toStore.length === 0) break;
       if (toStore.length === 0) continue;
 
       // onConflictDoNothing plus `returning` makes this safe against two overlapping
@@ -148,7 +189,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    result.remaining = Math.max(fresh.length - result.processed, 0);
+    result.remaining = Math.max(fresh.length - result.processed - result.errors.length, 0);
 
     await runReminderPass(result, hasTimeLeft);
   } catch (err) {
@@ -166,7 +207,8 @@ export async function GET(req: NextRequest) {
 // rather than throws so one bad message cannot take down the batch around it.
 async function processMessage(
   gmail: gmail_v1.Gmail,
-  messageId: string
+  messageId: string,
+  llmBudget: { remaining: number; used: number }
 ): Promise<MessageOutcome> {
   try {
     // format: "full" (not "metadata") because the dashboard shows the whole message
@@ -180,16 +222,33 @@ async function processMessage(
     const { text: extractedText, html: bodyHtml } = extractMessageContent(full.data.payload);
     const receivedAt = new Date(Number(full.data.internalDate ?? Date.now()));
 
-    const category = await classifyEmail(subject, snippet);
-    if (category === "Skip") return { status: "skip" };
+    // Keyword rules first: free, instant, and they catch the majority of real
+    // pipeline mail. Only genuinely ambiguous messages are worth an LLM call.
+    let category = keywordClassify(subject, snippet);
 
-    const reminderDueAt = EXTRACT_DUE_DATE_FOR.includes(category as Category)
-      ? await extractDueDate(subject, snippet, receivedAt)
-      : null;
+    if (!category) {
+      if (llmBudget.remaining <= 0) return { status: "defer" };
+      llmBudget.remaining--;
+      llmBudget.used++;
+
+      const llmResult = await llmClassify(subject, snippet);
+      if (llmResult === "Skip") return { status: "ignore", messageId };
+      category = llmResult;
+    }
+
+    // Due-date extraction is a second LLM call, so it draws from the same budget.
+    // Missing a due date is recoverable (the arrival ping still fires); blowing the
+    // daily quota is not.
+    let reminderDueAt: Date | null = null;
+    if (EXTRACT_DUE_DATE_FOR.includes(category) && llmBudget.remaining > 0) {
+      llmBudget.remaining--;
+      llmBudget.used++;
+      reminderDueAt = await extractDueDate(subject, snippet, receivedAt);
+    }
 
     return {
       status: "store",
-      notify: NOTIFY_ON_ARRIVAL.includes(category as Category),
+      notify: NOTIFY_ON_ARRIVAL.includes(category),
       values: {
         gmailMessageId: messageId,
         company: extractCompany(from, subject),
@@ -267,6 +326,8 @@ async function runReminderPass(result: SyncResult, hasTimeLeft: () => boolean) {
 // to reach the same place the reminders do, or the next outage goes unnoticed for
 // days again — which is exactly how this one lasted from Sep 4 to Sep 6.
 async function alertOnProblems(result: SyncResult, fatalError: string | null) {
+  // A budget stop on its own is normal backlog draining, not a problem worth a ping.
+  // It only gets reported when something else already made this alert fire.
   if (!fatalError && result.errors.length === 0 && !result.ranOutOfTime) return;
 
   // Only the heading is markup. Everything else is escaped body text, because it is
@@ -278,6 +339,13 @@ async function alertOnProblems(result: SyncResult, fatalError: string | null) {
     lines.push(
       escapeMarkdownV2(
         `Ran out of time with ${result.remaining} message(s) left. They retry next run.`
+      )
+    );
+  }
+  if (result.hitLlmBudget) {
+    lines.push(
+      escapeMarkdownV2(
+        `Hit the ${LLM_CALLS_PER_RUN}-call LLM budget with ${result.remaining} message(s) left. They retry next run.`
       )
     );
   }

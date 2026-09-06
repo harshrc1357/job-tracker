@@ -42,7 +42,14 @@ if ([string]::IsNullOrWhiteSpace($secret)) {
 
 try {
     $response = Invoke-RestMethod -Uri "$SYNC_URL`?secret=$secret" -Method Get -TimeoutSec 90
-    $summary = "ok inserted=$($response.inserted) reminders=$($response.remindersSent) remaining=$($response.remaining) errors=$($response.errors.Count)"
+
+    # Dump the full response next to the log so a run can be inspected afterwards.
+    # The body carries no secret — the secret only ever travels in the request.
+    $responsePath = Join-Path $projectRoot "sync-last-response.json"
+    $response | ConvertTo-Json -Depth 6 | Set-Content -Path $responsePath -Encoding utf8
+
+    $errorCount = @($response.errors).Count
+    $summary = "ok inserted=$($response.inserted) reminders=$($response.remindersSent) remaining=$($response.remaining) errors=$errorCount"
     Write-Log $summary
 } catch {
     # The route alerts to Telegram itself for anything it can catch. This log is for

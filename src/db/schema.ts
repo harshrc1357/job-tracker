@@ -35,6 +35,18 @@ export const applications = pgTable("applications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Message ids the classifier has already judged to be not job-related.
+//
+// Without this, every non-job email inside the lookback window gets re-fetched and
+// re-classified on every run, forever — 323 wasted LLM calls per run against a free
+// tier of 250 per DAY, which burned the quota permanently and meant real job mail
+// stopped being classified at all. A skip is a decision worth keeping.
+export const ignoredMessages = pgTable("ignored_messages", {
+  id: serial("id").primaryKey(),
+  gmailMessageId: text("gmail_message_id").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Single-row table holding the Gmail OAuth refresh token once you've connected an account.
 export const googleAuth = pgTable("google_auth", {
   id: serial("id").primaryKey(),

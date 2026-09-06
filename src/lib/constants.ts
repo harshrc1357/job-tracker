@@ -17,6 +17,12 @@ export const SYNC_TIME_BUDGET_MS = 45_000;
 // and Gmail starts returning 429s.
 export const SYNC_CONCURRENCY = 6;
 
+// Hard ceiling on LLM classification calls in a single run. Groq's free tier allows
+// 250 requests per DAY, so an unbounded run drains the entire quota in one go and
+// every later run fails outright. Anything past the budget is simply left for the
+// next tick, which drains a backlog gradually instead of falling off a cliff.
+export const LLM_CALLS_PER_RUN = 40;
+
 // How far ahead a reminder counts as "coming up" — both for the repeating
 // Telegram nudge the sync job sends, and for what the dashboard's Upcoming
 // reminders panel considers worth showing.
