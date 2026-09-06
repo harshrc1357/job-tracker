@@ -6,7 +6,7 @@ import { db } from "@/db/client";
 import { applications } from "@/db/schema";
 import { classifyEmail } from "@/lib/classify";
 import { extractDueDate } from "@/lib/extractDueDate";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { escapeMarkdownV2, sendTelegramMessage, trySendTelegramMessage } from "@/lib/telegram";
 import {
   EXTRACT_DUE_DATE_FOR,
   NOTIFY_ON_ARRIVAL,
@@ -15,9 +15,10 @@ import {
 } from "@/lib/categories";
 import {
   MAX_REMINDERS_PER_APPLICATION,
-  REMINDER_INTERVAL_HOURS,
-  REMINDER_WINDOW_HOURS,
+  SYNC_CONCURRENCY,
+  SYNC_TIME_BUDGET_MS,
 } from "@/lib/constants";
+import { decideReminder } from "@/lib/reminderPolicy";
 import { sanitizeEmailHtml } from "@/lib/sanitizeEmailHtml";
 
 export const runtime = "nodejs";
@@ -28,8 +29,6 @@ export const maxDuration = 60;
 //
 // Rolling window, not an absolute date range: an `after:/before:` pair goes stale the
 // moment the clock passes it, and the sync then silently returns zero new mail forever.
-// Deduping happens against gmail_message_id, so re-scanning the same fortnight every
-// run is cheap and means a message that failed mid-batch gets picked back up.
 const LOOKBACK_DAYS = 14;
 const JOB_QUERY =
   `newer_than:${LOOKBACK_DAYS}d ` +
@@ -37,159 +36,283 @@ const JOB_QUERY =
   'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
   '"security code" OR "verify your email" OR "confirm your email")';
 
+const MAX_LISTED_MESSAGES = 500;
+
+// How many individual errors get quoted in the Telegram alert before it truncates.
+const MAX_ALERT_ERRORS = 5;
+
+type SyncResult = {
+  listed: number;
+  alreadyStored: number;
+  processed: number;
+  inserted: number;
+  remindersSent: number;
+  remaining: number;
+  ranOutOfTime: boolean;
+  errors: string[];
+};
+
+// What one message turned into. Kept as data rather than as a direct db.insert so the
+// fetch/classify work can run concurrently while the writes stay ordered and cheap.
+type MessageOutcome =
+  | { status: "skip" }
+  | { status: "error"; message: string }
+  | { status: "store"; values: typeof applications.$inferInsert; notify: boolean };
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const result = { checked: 0, inserted: 0, remindersSent: 0, errors: [] as string[] };
+  const startedAt = Date.now();
+  const hasTimeLeft = () => Date.now() - startedAt < SYNC_TIME_BUDGET_MS;
+
+  const result: SyncResult = {
+    listed: 0,
+    alreadyStored: 0,
+    processed: 0,
+    inserted: 0,
+    remindersSent: 0,
+    remaining: 0,
+    ranOutOfTime: false,
+    errors: [],
+  };
 
   try {
     const gmail = await getGmailClient();
-    const list = await gmail.users.messages.list({ userId: "me", q: JOB_QUERY, maxResults: 500 });
+    const list = await gmail.users.messages.list({
+      userId: "me",
+      q: JOB_QUERY,
+      maxResults: MAX_LISTED_MESSAGES,
+    });
     const messages = list.data.messages ?? [];
-    result.checked = messages.length;
+    result.listed = messages.length;
 
-    for (const message of messages) {
-      if (!message.id) continue;
+    // One query for every id we already hold, instead of a SELECT per message. At a
+    // 14-day window that was 100+ sequential database round trips per run before any
+    // real work started, and it is most of why every run was hitting the 60s wall.
+    const stored = await db
+      .select({ gmailMessageId: applications.gmailMessageId })
+      .from(applications);
+    const storedIds = new Set(stored.map((row) => row.gmailMessageId));
 
-      const already = await db
-        .select({ id: applications.id })
-        .from(applications)
-        .where(eq(applications.gmailMessageId, message.id))
-        .limit(1);
-      if (already.length > 0) continue;
+    const fresh = messages.flatMap((message) =>
+      message.id && !storedIds.has(message.id) ? [message.id] : []
+    );
+    result.alreadyStored = messages.length - fresh.length;
 
-      // One message's failure (most likely a Groq call) shouldn't abort the whole
-      // batch, and shouldn't get silently treated as "not a job email" either —
-      // leaving it uninserted means the next sync run picks it back up as long as
-      // it's still inside the JOB_QUERY newer_than window.
-      try {
-        // format: "full" (not "metadata") because the dashboard now shows the
-        // whole message when you click into it, not just the list snippet.
-        const full = await gmail.users.messages.get({
-          userId: "me",
-          id: message.id,
-          format: "full",
-        });
-
-        const headers = full.data.payload?.headers ?? [];
-        const subject = headers.find((h) => h.name === "Subject")?.value ?? "(no subject)";
-        const from = headers.find((h) => h.name === "From")?.value ?? "";
-        const snippet = full.data.snippet ?? "";
-        const { text: extractedText, html: bodyHtml } = extractMessageContent(full.data.payload);
-        const body = extractedText || snippet;
-        const receivedAt = new Date(Number(full.data.internalDate ?? Date.now()));
-
-        const category = await classifyEmail(subject, snippet);
-        if (category === "Skip") continue;
-
-        const company = extractCompany(from, subject);
-        const fromEmail = extractEmail(from);
-        const reminderDueAt = EXTRACT_DUE_DATE_FOR.includes(category as Category)
-          ? await extractDueDate(subject, snippet, receivedAt)
-          : null;
-
-        await db.insert(applications).values({
-          gmailMessageId: message.id,
-          company,
-          category,
-          subject,
-          snippet,
-          body,
-          bodyHtml,
-          fromEmail,
-          receivedAt,
-          reminderDueAt,
-        });
-        result.inserted++;
-
-        if (NOTIFY_ON_ARRIVAL.includes(category as Category)) {
-          await sendTelegramMessage(
-            `*${category}* — ${company}\n${subject}\n\n_${snippet.slice(0, 200)}_`
-          );
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        result.errors.push(`message ${message.id}: ${msg}`);
-        console.error("[sync] failed on message", message.id, err);
+    // Fetch and classify in small concurrent batches, checking the clock between
+    // them. Anything left when the budget runs out simply stays unrecorded, so the
+    // next tick picks it up — partial progress that reports itself beats a 504 that
+    // reports nothing.
+    for (let offset = 0; offset < fresh.length; offset += SYNC_CONCURRENCY) {
+      if (!hasTimeLeft()) {
+        result.ranOutOfTime = true;
+        break;
       }
-    }
 
-    // Second pass: repeating "coming up" reminders. Only Interview, Assessment and
-    // Offer rows are eligible (REMINDER_CATEGORIES) — Applied, Rejection, Reminder
-    // and Verification emails never nudge. Each eligible row pings once every
-    // REMINDER_INTERVAL_HOURS, up to MAX_REMINDERS_PER_APPLICATION times, then stops
-    // for good. `reminderSent` is the terminal flag: cap reached, or event passed.
-    const now = new Date();
-    const dueSoonCutoff = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
-    const intervalMs = REMINDER_INTERVAL_HOURS * 60 * 60 * 1000;
+      const batch = fresh.slice(offset, offset + SYNC_CONCURRENCY);
+      const outcomes = await Promise.all(batch.map((id) => processMessage(gmail, id)));
+      result.processed += batch.length;
 
-    const pending = await db
-      .select()
-      .from(applications)
-      .where(
-        and(
-          isNotNull(applications.reminderDueAt),
-          eq(applications.reminderSent, false),
-          inArray(applications.category, REMINDER_CATEGORIES)
-        )
+      for (const outcome of outcomes) {
+        if (outcome.status === "error") result.errors.push(outcome.message);
+      }
+
+      const toStore = outcomes.flatMap((outcome) =>
+        outcome.status === "store" ? [outcome] : []
       );
+      if (toStore.length === 0) continue;
 
-    for (const app of pending) {
-      if (!app.reminderDueAt) continue;
+      // onConflictDoNothing plus `returning` makes this safe against two overlapping
+      // runs: whichever loses the race inserts nothing and gets nothing back, so only
+      // the winner sends the Telegram notification. No duplicate pings.
+      const insertedRows = await db
+        .insert(applications)
+        .values(toStore.map((outcome) => outcome.values))
+        .onConflictDoNothing({ target: applications.gmailMessageId })
+        .returning({ gmailMessageId: applications.gmailMessageId });
 
-      // Event is in the past: nothing left to remind about, close the row out.
-      if (app.reminderDueAt <= now) {
-        await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
-        continue;
-      }
+      const insertedIds = new Set(insertedRows.map((row) => row.gmailMessageId));
+      result.inserted += insertedRows.length;
 
-      // Still further out than the window — leave it for a later run.
-      if (app.reminderDueAt > dueSoonCutoff) continue;
-
-      // Cap already hit (belt and braces; the update below closes the row too).
-      if (app.reminderCount >= MAX_REMINDERS_PER_APPLICATION) {
-        await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
-        continue;
-      }
-
-      // Not enough time since the last nudge.
-      if (app.lastReminderAt && now.getTime() - app.lastReminderAt.getTime() < intervalMs) continue;
-
-      // A failed Telegram send must not abort the rest of the batch, and must not
-      // bump the counter either — the row stays eligible for the next cron pass.
-      const nextCount = app.reminderCount + 1;
-      try {
-        await sendTelegramMessage(
-          `⏰ *${app.category} coming up* — ${app.company}\n${app.subject}\n` +
-            `Due: ${app.reminderDueAt.toLocaleString()}\n` +
-            `_Reminder ${nextCount} of ${MAX_REMINDERS_PER_APPLICATION}_`
-        );
-        await db
-          .update(applications)
-          .set({
-            reminderCount: nextCount,
-            lastReminderAt: now,
-            reminderSent: nextCount >= MAX_REMINDERS_PER_APPLICATION,
-          })
-          .where(eq(applications.id, app.id));
-        result.remindersSent++;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        result.errors.push(`reminder ${app.id}: ${msg}`);
-        console.error("[sync] reminder failed for application", app.id, err);
+      for (const outcome of toStore) {
+        if (!outcome.notify) continue;
+        if (!insertedIds.has(outcome.values.gmailMessageId)) continue;
+        try {
+          await sendTelegramMessage(formatArrivalMessage(outcome.values));
+        } catch (err) {
+          result.errors.push(`notify ${outcome.values.gmailMessageId}: ${describe(err)}`);
+        }
       }
     }
+
+    result.remaining = Math.max(fresh.length - result.processed, 0);
+
+    await runReminderPass(result, hasTimeLeft);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    result.errors.push(message);
+    result.errors.push(describe(err));
     console.error("[sync] failed", err);
+    await alertOnProblems(result, describe(err));
     return NextResponse.json({ ok: false, ...result }, { status: 500 });
   }
 
+  await alertOnProblems(result, null);
   return NextResponse.json({ ok: true, ...result });
+}
+
+// Fetches one message and works out what, if anything, to store for it. Returns
+// rather than throws so one bad message cannot take down the batch around it.
+async function processMessage(
+  gmail: gmail_v1.Gmail,
+  messageId: string
+): Promise<MessageOutcome> {
+  try {
+    // format: "full" (not "metadata") because the dashboard shows the whole message
+    // when you click into it, not just the list snippet.
+    const full = await gmail.users.messages.get({ userId: "me", id: messageId, format: "full" });
+
+    const headers = full.data.payload?.headers ?? [];
+    const subject = headers.find((h) => h.name === "Subject")?.value ?? "(no subject)";
+    const from = headers.find((h) => h.name === "From")?.value ?? "";
+    const snippet = full.data.snippet ?? "";
+    const { text: extractedText, html: bodyHtml } = extractMessageContent(full.data.payload);
+    const receivedAt = new Date(Number(full.data.internalDate ?? Date.now()));
+
+    const category = await classifyEmail(subject, snippet);
+    if (category === "Skip") return { status: "skip" };
+
+    const reminderDueAt = EXTRACT_DUE_DATE_FOR.includes(category as Category)
+      ? await extractDueDate(subject, snippet, receivedAt)
+      : null;
+
+    return {
+      status: "store",
+      notify: NOTIFY_ON_ARRIVAL.includes(category as Category),
+      values: {
+        gmailMessageId: messageId,
+        company: extractCompany(from, subject),
+        category,
+        subject,
+        snippet,
+        body: extractedText || snippet,
+        bodyHtml,
+        fromEmail: extractEmail(from),
+        receivedAt,
+        reminderDueAt,
+      },
+    };
+  } catch (err) {
+    // Left unrecorded on purpose: the next run re-lists it while it is still inside
+    // the lookback window, so a transient Gmail or Groq failure self-heals.
+    console.error("[sync] failed on message", messageId, err);
+    return { status: "error", message: `message ${messageId}: ${describe(err)}` };
+  }
+}
+
+// Repeating "coming up" nudges. Only Interview, Assessment and Offer rows are
+// eligible — Applied, Rejection, Reminder and Verification never nudge. Cadence and
+// cap live in decideReminder (see reminderPolicy.ts), which is unit tested; this
+// function only does the I/O around that decision.
+async function runReminderPass(result: SyncResult, hasTimeLeft: () => boolean) {
+  const now = new Date();
+
+  const pending = await db
+    .select()
+    .from(applications)
+    .where(
+      and(
+        isNotNull(applications.reminderDueAt),
+        eq(applications.reminderSent, false),
+        inArray(applications.category, REMINDER_CATEGORIES)
+      )
+    );
+
+  for (const app of pending) {
+    if (!hasTimeLeft()) {
+      result.ranOutOfTime = true;
+      return;
+    }
+
+    const decision = decideReminder(app, now);
+    if (decision.action === "skip") continue;
+
+    if (decision.action === "close") {
+      await db.update(applications).set({ reminderSent: true }).where(eq(applications.id, app.id));
+      continue;
+    }
+
+    // Send first, then record. A failed send must not burn a count, so the row stays
+    // eligible and the next tick retries it.
+    try {
+      await sendTelegramMessage(formatReminderMessage(app, decision.nextCount));
+      await db
+        .update(applications)
+        .set({
+          reminderCount: decision.nextCount,
+          lastReminderAt: now,
+          reminderSent: decision.isFinal,
+        })
+        .where(eq(applications.id, app.id));
+      result.remindersSent++;
+    } catch (err) {
+      result.errors.push(`reminder ${app.id}: ${describe(err)}`);
+      console.error("[sync] reminder failed for application", app.id, err);
+    }
+  }
+}
+
+// A red run in a CI dashboard nobody opens is not a notification. Sync problems have
+// to reach the same place the reminders do, or the next outage goes unnoticed for
+// days again — which is exactly how this one lasted from Sep 4 to Sep 6.
+async function alertOnProblems(result: SyncResult, fatalError: string | null) {
+  if (!fatalError && result.errors.length === 0 && !result.ranOutOfTime) return;
+
+  // Only the heading is markup. Everything else is escaped body text, because it is
+  // all attacker-adjacent: error strings carry subjects, sender names and API
+  // responses, any of which can contain a stray asterisk or underscore.
+  const lines = ["⚠️ *Job tracker sync problem*"];
+  if (fatalError) lines.push(escapeMarkdownV2(`Run failed: ${fatalError}`));
+  if (result.ranOutOfTime) {
+    lines.push(
+      escapeMarkdownV2(
+        `Ran out of time with ${result.remaining} message(s) left. They retry next run.`
+      )
+    );
+  }
+  if (result.errors.length > 0) {
+    lines.push(escapeMarkdownV2(`${result.errors.length} error(s):`));
+    // Cap the detail — a broken Groq key produces one error per message and Telegram
+    // rejects anything over 4096 characters.
+    lines.push(...result.errors.slice(0, MAX_ALERT_ERRORS).map((e) => escapeMarkdownV2(`• ${e}`)));
+  }
+
+  await trySendTelegramMessage(lines.join("\n"));
+}
+
+function formatArrivalMessage(values: typeof applications.$inferInsert): string {
+  const category = escapeMarkdownV2(String(values.category));
+  const company = escapeMarkdownV2(values.company);
+  const subject = escapeMarkdownV2(values.subject ?? "");
+  const snippet = escapeMarkdownV2((values.snippet ?? "").slice(0, 200));
+  return `*${category}* — ${company}\n${subject}\n\n_${snippet}_`;
+}
+
+function formatReminderMessage(
+  app: typeof applications.$inferSelect,
+  nextCount: number
+): string {
+  const category = escapeMarkdownV2(app.category);
+  const company = escapeMarkdownV2(app.company);
+  const subject = escapeMarkdownV2(app.subject ?? "");
+  const due = escapeMarkdownV2(app.reminderDueAt?.toLocaleString() ?? "");
+  const counter = escapeMarkdownV2(`Reminder ${nextCount} of ${MAX_REMINDERS_PER_APPLICATION}`);
+  return `⏰ *${category} coming up* — ${company}\n${subject}\nDue: ${due}\n_${counter}_`;
+}
+
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // Pulls both a plain-text and an HTML rendering out of a Gmail message payload.
