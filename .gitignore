@@ -7,3 +7,7 @@ node_modules/
 *.png
 
 .vercel
+
+# Local sync trigger artifacts
+sync-trigger.log
+sync-last-response.json
