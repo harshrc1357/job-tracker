@@ -20,6 +20,7 @@ import {
   SYNC_TIME_BUDGET_MS,
 } from "@/lib/constants";
 import { decideReminder } from "@/lib/reminderPolicy";
+import { isRateLimit } from "@/lib/isRateLimit";
 import { sanitizeEmailHtml } from "@/lib/sanitizeEmailHtml";
 
 export const runtime = "nodejs";
@@ -53,6 +54,7 @@ type SyncResult = {
   remaining: number;
   ranOutOfTime: boolean;
   hitLlmBudget: boolean;
+  wasRateLimited: boolean;
   errors: string[];
 };
 
@@ -65,6 +67,9 @@ type MessageOutcome =
   // Needed an LLM call but the run's budget was spent. Left completely untouched so
   // the next tick picks it up.
   | { status: "defer" }
+  // The LLM provider is rate limiting. Distinct from a generic error because there is
+  // no point trying the rest of the run — every remaining call fails the same way.
+  | { status: "rateLimited"; message: string }
   | { status: "error"; message: string }
   | { status: "store"; values: typeof applications.$inferInsert; notify: boolean };
 
@@ -88,6 +93,7 @@ export async function GET(req: NextRequest) {
     remaining: 0,
     ranOutOfTime: false,
     hitLlmBudget: false,
+    wasRateLimited: false,
     errors: [],
   };
 
@@ -141,6 +147,12 @@ export async function GET(req: NextRequest) {
 
       for (const outcome of outcomes) {
         if (outcome.status === "error") result.errors.push(outcome.message);
+        if (outcome.status === "rateLimited" && !result.wasRateLimited) {
+          // Report the throttle once, not once per message. The remaining messages
+          // are untouched and get picked up whenever the quota comes back.
+          result.wasRateLimited = true;
+          result.errors.push(outcome.message);
+        }
       }
 
       // Record the skips before anything else. If the run dies after this point the
@@ -163,7 +175,10 @@ export async function GET(req: NextRequest) {
         outcome.status === "store" ? [outcome] : []
       );
 
-      if (result.hitLlmBudget && toStore.length === 0) break;
+      // Store whatever this batch already produced, then stop. Everything past here
+      // needs a call the provider is refusing, so continuing only manufactures
+      // identical errors.
+      if ((result.hitLlmBudget || result.wasRateLimited) && toStore.length === 0) break;
       if (toStore.length === 0) continue;
 
       // onConflictDoNothing plus `returning` makes this safe against two overlapping
@@ -189,7 +204,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    result.remaining = Math.max(fresh.length - result.processed - result.errors.length, 0);
+    // Remaining means "not yet banked", not "not yet looked at". A message is only
+    // done when it is either stored or recorded as ignored — anything else (errored,
+    // deferred, cut off by the clock) comes back on the next run.
+    result.remaining = Math.max(fresh.length - result.inserted - result.ignored, 0);
 
     await runReminderPass(result, hasTimeLeft);
   } catch (err) {
@@ -264,9 +282,13 @@ async function processMessage(
     };
   } catch (err) {
     // Left unrecorded on purpose: the next run re-lists it while it is still inside
-    // the lookback window, so a transient Gmail or Groq failure self-heals.
+    // the lookback window, so a transient Gmail or Groq failure self-heals. A rate
+    // limit specifically must never be banked as "not job related" — that would
+    // permanently discard real mail because of a temporary quota problem.
     console.error("[sync] failed on message", messageId, err);
-    return { status: "error", message: `message ${messageId}: ${describe(err)}` };
+    const message = `message ${messageId}: ${describe(err)}`;
+    if (isRateLimit(err)) return { status: "rateLimited", message };
+    return { status: "error", message };
   }
 }
 
@@ -346,6 +368,13 @@ async function alertOnProblems(result: SyncResult, fatalError: string | null) {
     lines.push(
       escapeMarkdownV2(
         `Hit the ${LLM_CALLS_PER_RUN}-call LLM budget with ${result.remaining} message(s) left. They retry next run.`
+      )
+    );
+  }
+  if (result.wasRateLimited) {
+    lines.push(
+      escapeMarkdownV2(
+        `Groq is rate limiting. Stopped early with ${result.remaining} message(s) left; they retry once quota returns.`
       )
     );
   }
