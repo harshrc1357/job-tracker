@@ -48,6 +48,32 @@ describe("parseVerdict", () => {
     expect(verdict).toEqual({ isJob: false, reason: "newsletter" });
   });
 
+  test("salvages a verdict cut off by max_tokens mid-evidence", () => {
+    // Arrange: verbatim from a real row that threw away a correct answer over a
+    // missing closing brace. The prompt fixes the field order, so a cut in evidence
+    // always leaves isJob and category intact.
+    const raw = '{"isJob": true, "category": "Applied", "evidence": "Thank you for appl';
+
+    // Act
+    const verdict = parseVerdict(raw, "test-model");
+
+    // Assert
+    expect(verdict).toEqual({ isJob: true, category: "Applied", evidence: "" });
+  });
+
+  test("refuses to salvage when the truncated category is not one of ours", () => {
+    // Arrange: salvage must recover a stated verdict, never invent one.
+    expect(() =>
+      parseVerdict('{"isJob": true, "category": "Screen', "test-model")
+    ).toThrow(LlmError);
+  });
+
+  test("refuses to salvage prose that merely mentions the field names", () => {
+    expect(() =>
+      parseVerdict('The email is job related so isJob is true and category is Applied', "test-model")
+    ).toThrow(LlmError);
+  });
+
   test("throws on unparseable output instead of guessing a skip", () => {
     // Arrange: this is the dangerous case. Silently returning "not job related" here
     // is how a model outage permanently discards an interview invite.

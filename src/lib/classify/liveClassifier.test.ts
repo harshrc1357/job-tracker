@@ -69,6 +69,89 @@ describe.skipIf(!LIVE)("classifyEmail against live models", () => {
     expect(result).toMatchObject({ decision: "store", category: "Applied" });
   });
 
+  // The first reclassify run over the real inbox dropped six genuine application
+  // confirmations because they were relayed by LinkedIn, Indeed and Ashby rather than
+  // sent by the employer. Over-rejecting is the more dangerous direction of the same
+  // mistake promotional mail causes, so each of these is pinned from a real message.
+  describe("application confirmations relayed by a platform", () => {
+    test("LinkedIn 'your application was sent' is Applied, not a platform notification", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Harsh Rakesh, your application was sent to eBusiness Solutions, Inc.",
+          from: "LinkedIn <jobs-noreply@linkedin.com>",
+          body: "Your application was sent to eBusiness Solutions, Inc. Artificial Intelligence Engineer, eBusiness Solutions, Inc., Dallas, TX. View job: https://www.linkedin.com/jobs/view/123",
+        })
+      );
+
+      expect(result).toMatchObject({ decision: "store", category: "Applied" });
+    });
+
+    test("an Ashby-relayed acknowledgement is Applied", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Thank you for applying to Juniper Square",
+          from: "Juniper Square Talent Team <no-reply@ashbyhq.com>",
+          body: "Hi Harsh, Thank you for submitting your application to the Forward Deployed Engineer, Applied AI position at Juniper Square! We've received your application and our team will review it shortly.",
+        })
+      );
+
+      expect(result).toMatchObject({ decision: "store", category: "Applied" });
+    });
+
+    test("Indeed's 'your application has been submitted' is Applied", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Indeed Application: AI/ML Software Test Engineer (GenAI & Chatbot Solutions)",
+          from: "Indeed Apply <indeedapply@indeed.com>",
+          body: "Your application has been submitted. Good luck! If you notice an error in your application, please contact Indeed.",
+        })
+      );
+
+      expect(result).toMatchObject({ decision: "store", category: "Applied" });
+    });
+
+    test("a LinkedIn status update whose body is all chrome is still Applied", async () => {
+      // Arrange: verbatim from a real row. The subject carries the entire message and
+      // the body is a logo, a "Your update from" line and a footer. Dropped on the
+      // first corrected run because the body looked like a platform notification.
+      const result = await classifyEmail(
+        email({
+          subject: "Your application to AI Engineer, Software at Future Secure AI",
+          from: "LinkedIn <jobs-noreply@linkedin.com>",
+          body: "Your update from Future Secure AI\n----------------------------------------\nThis email was intended for Harsh Rakesh Chauhan (Founding AI Engineer). Learn why we included this. https://www.linkedin.com/help\n\nYou are receiving LinkedIn notification emails.\nUnsubscribe · Help",
+          headers: { "list-unsubscribe": "<mailto:unsubscribe@linkedin.com>" },
+        })
+      );
+
+      expect(result).toMatchObject({ decision: "store", category: "Applied" });
+    });
+
+    test("but Indeed's 'could be a match, submit an application' is still not job mail", async () => {
+      // Arrange: the control. Same sender domain, opposite direction of action.
+      const result = await classifyEmail(
+        email({
+          subject: "Associate Concept Artist - Merch @ Catface",
+          from: "Indeed <donotreply@indeed.com>",
+          body: "Hi Harsh Rakesh, It looks like your background could be a match for this Associate Concept Artist - Merch role. Please submit a quick application if you are interested.",
+        })
+      );
+
+      expect(result.decision).toBe("skip");
+    });
+
+    test("and ZipRecruiter's 'may want to hire you' is still not job mail", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Macmillan Learning may want to hire you",
+          from: "ZipRecruiter <alerts@ziprecruiter.com>",
+          body: "Macmillan Learning is hiring and your profile looks like a fit. Apply now to get in front of the hiring team.",
+        })
+      );
+
+      expect(result.decision).toBe("skip");
+    });
+  });
+
   test("promotional 'this role matches your profile' is not a pipeline category", async () => {
     // Arrange: complaint #1. This survives the free prefilter (no alert sender, no
     // digest subject) and used to land in Interview or Assessment.

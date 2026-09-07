@@ -30,10 +30,22 @@ Answer NO for anything broadcast rather than addressed to him personally:
 - newsletters, blog posts, webinars, courses, bootcamps, certification and career-coaching marketing
 - sponsored or promotional mail from job boards, even when it names a real role
 - invitations to apply, "we are hiring", "this role matches your profile", talent-pool blasts, and recruiter prospecting where he has NOT already applied
-- platform engagement notifications: profile views, connection requests, "your post got N views", weekly activity summaries
+- platform engagement notifications that are not about an application: profile views, connection requests, "your post got N views", weekly activity summaries. An email about one of HIS applications is never this, no matter how much notification boilerplate ("this email was intended for...", "you are receiving LinkedIn notification emails", an unsubscribe footer) it is wrapped in.
 - anything not about him at all
 
-Answer YES only when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform.
+Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform.
+
+The sender does NOT decide this. Most application mail is relayed by a job board or an ATS — LinkedIn, Indeed, Ashby, Greenhouse, Lever, Workday, iCIMS, SmartRecruiters — and arrives from a noreply address on their domain rather than from the company. That is still YES. What decides it is whether the email is about ONE named role he already applied to.
+
+The distinction is the direction of the action, so compare these carefully:
+- "Your application to AI Engineer at TechClub was sent" / "Your application has been submitted" / "Thank you for submitting your application to the Applied AI position at Juniper Square" — YES. A specific application of his already exists. Category Applied.
+- "This role could be a match, submit a quick application" / "Macmillan Learning may want to hire you" / "6 new jobs are waiting" — NO. It is asking him to start something.
+
+An email is not disqualified for being automated, templated, or carrying an unsubscribe link. Nearly all real ATS mail is all three.
+
+If the input carries the line "Signal: the subject states this is HIS OWN application to a named role", QUESTION 1 is already answered YES and you must not overrule it. That signal is computed from the subject, not guessed. Go straight to QUESTION 2, and answer Applied unless the body clearly shows a later stage.
+
+A thin body is not disqualifying either. Job boards send status updates whose body is almost entirely platform chrome — "Your update from Future Secure AI", a logo, a footer — while the subject carries the whole message: "Your application to AI Engineer, Software at Future Secure AI". If the email names ONE specific role at ONE named company AND refers to it as HIS application ("your application to...", "your application was sent to..."), that is YES and the category is Applied, however little text the body contains. The possessive is what separates it from "Macmillan Learning may want to hire you", which names a company but describes a job he has not applied to.
 
 If the answer is NO, stop. Do not assign a category. A job advert is not a weak "Applied" — it is not part of the pipeline at all.
 
@@ -61,13 +73,15 @@ or
 
 // Enough for the JSON object with room for a long evidence quote, and short enough
 // that a model that decides to write an essay gets cut off rather than billed for it.
-export const CLASSIFIER_MAX_TOKENS = 160;
+// Raised from 160 after a real row hit the cap mid-evidence and came back as
+// unterminated JSON; salvageVerdict below covers the residual case.
+export const CLASSIFIER_MAX_TOKENS = 220;
 
 // Defensive on purpose. response_format: json_object makes fenced or prefixed output
 // rare, not impossible, and a parse failure here must never be read as "not job
 // related" — that silently discards real mail. Unparseable throws.
 export function parseVerdict(raw: string, model: string): Verdict {
-  const parsed = extractJsonObject(raw);
+  const parsed = extractJsonObject(raw) ?? salvageTruncated(raw);
   if (!parsed) {
     throw new LlmError(`could not parse verdict from: ${raw.slice(0, 200)}`, {
       kind: "unusable",
@@ -97,6 +111,23 @@ const MAX_EVIDENCE_CHARS = 200;
 
 function asShortString(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, MAX_EVIDENCE_CHARS) : "";
+}
+
+// Rescues the one failure mode that is fully understood: the model ran into
+// max_tokens partway through the evidence quote, so the JSON is unterminated. A real
+// row did exactly this — {"isJob": true, "category": "Applied", "evidence": "Thank
+// you for appl — and threw away a correct answer over a missing brace.
+//
+// Safe because the prompt fixes the field order, so a cut in `evidence` always leaves
+// isJob and category complete. Deliberately strict: BOTH fields must be present and
+// explicit, and the category must be one of ours. It cannot invent a verdict out of
+// prose, only recover one that is already unambiguously stated. The evidence is lost,
+// which costs a little diagnosability and nothing else.
+function salvageTruncated(raw: string): Record<string, unknown> | null {
+  if (!/"isJob"\s*:\s*true/.test(raw)) return null;
+  const category = raw.match(/"category"\s*:\s*"([A-Za-z]+)"/);
+  if (!category || !isCategory(category[1])) return null;
+  return { isJob: true, category: category[1], evidence: "" };
 }
 
 // Takes the first {...} block, so a stray "```json" fence or a leading "Here is"

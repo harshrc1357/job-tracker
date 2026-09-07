@@ -11,3 +11,6 @@ node_modules/
 # Local sync trigger artifacts
 sync-trigger.log
 sync-last-response.json
+
+# Row snapshots written by scripts/reclassify.mts before it overwrites categories.
+backups/

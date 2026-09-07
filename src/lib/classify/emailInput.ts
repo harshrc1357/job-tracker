@@ -25,7 +25,37 @@ export type EmailForClassification = {
   // OWNER_EMAIL is not configured, in which case the hint is simply omitted rather
   // than asserted as "no".
   directRecipient: boolean | null;
+  // Whether the subject line states, possessively, that this is HIS application to a
+  // named role. Computed by statesOwnApplication below rather than left to the model.
+  ownApplicationSubject: boolean;
 };
+
+// LinkedIn and similar relays send application receipts whose entire content is the
+// subject — "Your application to AI Engineer, Software at Future Secure AI" — over a
+// body that is nothing but "Your update from <company>", a profile blurb and an
+// unsubscribe footer. Asked to judge those, the model flips: three real rows of the
+// identical shape came back Applied, "generic update" and "job alert" on the same run.
+//
+// It is not a hard question, it is an underdetermined one, and the fix is to stop
+// asking it. The possessive is decidable from the subject alone, so it is decided
+// here and passed in as a stated fact.
+//
+// Deliberately narrow. It requires "your application" AND a preposition introducing a
+// named role or company, so it fires on "your application to X" and "your application
+// was sent to X" but not on "your application could be a match for these roles" or
+// any phrasing that invites him to start something new.
+const OWN_APPLICATION_SUBJECT =
+  /\byour\s+application\b[^.!?]{0,40}?\b(to|at|for|was\s+sent\s+to|has\s+been\s+(sent|submitted|received))\b/i;
+
+// "Complete your application to unlock 6 new matches" satisfies the pattern above and
+// means the exact opposite: an imperative aimed at him, asking him to start or finish
+// something. An application he has been asked to complete is not one he has made.
+const IMPERATIVE_PREFIX = /\b(complete|start|finish|submit|continue|resume|update)\s+your\s+application\b/i;
+
+export function statesOwnApplication(subject: string): boolean {
+  if (IMPERATIVE_PREFIX.test(subject)) return false;
+  return OWN_APPLICATION_SUBJECT.test(subject);
+}
 
 const MAX_BODY_CHARS = 5_000;
 const TAIL_CHARS = 1_200;
@@ -48,6 +78,14 @@ export function buildClassifierInput(email: EmailForClassification): string {
   if (email.bulkSignals.length > 0) {
     lines.push(
       `Bulk-mail headers present: ${email.bulkSignals.join(", ")} (a hint that this is a mass send, not proof)`
+    );
+  }
+
+  // Stated before the bulk hints on purpose: it is the stronger signal, and it is a
+  // fact about the subject rather than a guess about intent.
+  if (email.ownApplicationSubject) {
+    lines.push(
+      "Signal: the subject states this is HIS OWN application to a named role. Question 1 is therefore YES."
     );
   }
 

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { buildClassifierInput, isDirectRecipient, type EmailForClassification } from "./emailInput";
+import {
+  buildClassifierInput,
+  isDirectRecipient,
+  statesOwnApplication,
+  type EmailForClassification,
+} from "./emailInput";
 
 const email = (overrides: Partial<EmailForClassification> = {}): EmailForClassification => ({
   subject: "Thank you for your application",
@@ -10,7 +15,39 @@ const email = (overrides: Partial<EmailForClassification> = {}): EmailForClassif
   snippet: "Thanks for applying.",
   bulkSignals: [],
   directRecipient: true,
+  ownApplicationSubject: false,
   ...overrides,
+});
+
+// The one question taken back off the model, because it flipped on it. Three real
+// rows of the identical shape came back Applied, "generic update" and "job alert" on
+// the same run — not a hard question, an underdetermined one.
+describe("statesOwnApplication", () => {
+  test("fires on the LinkedIn receipt shape that the model kept flipping on", () => {
+    expect(statesOwnApplication("Your application to AI Engineer, Software at Future Secure AI")).toBe(true);
+    expect(statesOwnApplication("Your application to AI / ML Engineer at ITMC Systems, Inc")).toBe(true);
+    expect(statesOwnApplication("Harsh Rakesh, your application was sent to eBusiness Solutions, Inc.")).toBe(true);
+  });
+
+  test("fires on submission confirmations from any relay", () => {
+    expect(statesOwnApplication("Your application has been submitted")).toBe(true);
+    expect(statesOwnApplication("Your application for Data Scientist has been received")).toBe(true);
+  });
+
+  test("does not fire on invitations to start a new application", () => {
+    // Arrange: the failure this rule must not cause. Each of these names a role he
+    // has not applied to, and treating them as his own application would put
+    // advertising straight back into the pipeline.
+    expect(statesOwnApplication("Macmillan Learning may want to hire you")).toBe(false);
+    expect(statesOwnApplication("Complete your application to unlock 6 new matches")).toBe(false);
+    expect(statesOwnApplication("Start your application today")).toBe(false);
+    expect(statesOwnApplication("9 new jobs for you")).toBe(false);
+  });
+
+  test("does not fire on a bare mention of the word application", () => {
+    expect(statesOwnApplication("An overview of our hiring process")).toBe(false);
+    expect(statesOwnApplication("Application tips for AI engineers")).toBe(false);
+  });
 });
 
 describe("buildClassifierInput", () => {

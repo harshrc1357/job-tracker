@@ -24,7 +24,12 @@
 
 import { complete } from "@/lib/llm/complete";
 import { CLASSIFIER_MAX_TOKENS, CLASSIFIER_SYSTEM_PROMPT, parseVerdict } from "./prompt";
-import { buildClassifierInput, isDirectRecipient, type EmailForClassification } from "./emailInput";
+import {
+  buildClassifierInput,
+  isDirectRecipient,
+  statesOwnApplication,
+  type EmailForClassification,
+} from "./emailInput";
 import { prefilter, type PrefilterInput } from "./prefilter";
 import type { Category } from "@/lib/categories";
 
@@ -109,6 +114,7 @@ function toClassifierEmail(
     snippet: email.snippet,
     bulkSignals,
     directRecipient: null,
+    ownApplicationSubject: statesOwnApplication(email.subject),
   };
 
   const ownerEmail = process.env.OWNER_EMAIL ?? "";
