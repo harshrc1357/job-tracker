@@ -1,4 +1,12 @@
-import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  unique,
+} from "drizzle-orm/pg-core";
 
 // One row per job-related email that made it past classification.
 export const applications = pgTable("applications", {
@@ -29,6 +37,12 @@ export const applications = pgTable("applications", {
   // - reminderSent   the loop is finished for this row: cap reached, or due date
   //                  passed. Kept as the single "stop asking" flag so the query
   //                  can skip finished rows cheaply.
+  // Why this row got the category it did. Not load-bearing — the dashboard never
+  // reads them — but a misclassification is otherwise unfalsifiable after the fact:
+  // you cannot tell a prompt regression from a genuinely ambiguous email without
+  // knowing which model answered and what text it pointed at.
+  classifiedBy: text("classified_by"),
+  classifierEvidence: text("classifier_evidence"),
   reminderCount: integer("reminder_count").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
   reminderSent: boolean("reminder_sent").notNull().default(false),
@@ -53,6 +67,32 @@ export const googleAuth = pgTable("google_auth", {
   refreshToken: text("refresh_token").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// How many LLM calls each model has made on a given day, in the OWNER's local
+// timezone (see llm/dailyUsage.ts for why not UTC).
+//
+// The per-minute token bucket lives in memory and is correctly thrown away with the
+// process. A per-DAY ceiling cannot: a serverless run that starts from zero on every
+// invocation has no ceiling at all, which is how a previous provider's entire daily
+// quota was drained in a single run and every later run failed outright.
+export const llmUsage = pgTable(
+  "llm_usage",
+  {
+    id: serial("id").primaryKey(),
+    // YYYY-MM-DD, owner-local. Text rather than date so it compares as a plain
+    // string and carries no timezone of its own.
+    day: text("day").notNull(),
+    // OpenRouter model slug, e.g. google/gemini-2.5-flash-lite.
+    model: text("model").notNull(),
+    calls: integer("calls").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // The upsert target. Without it two overlapping runs insert two rows for the
+    // same day and the cap silently doubles.
+    dayModel: unique("llm_usage_day_model").on(table.day, table.model),
+  })
+);
 
 // Bookkeeping for the last sync run — not load-bearing yet, but useful once we move
 // from a search query to Gmail's history API for incremental sync.

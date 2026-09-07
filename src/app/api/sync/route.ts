@@ -4,8 +4,11 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getGmailClient } from "@/lib/gmail";
 import { db } from "@/db/client";
 import { applications, ignoredMessages } from "@/db/schema";
-import { keywordClassify, llmClassify } from "@/lib/classify";
+import { classifyEmail } from "@/lib/classify";
 import { extractDueDate } from "@/lib/extractDueDate";
+import { LlmUnavailableError } from "@/lib/llm/errors";
+import { loadDailyUsage, ownerDayKey, recordDailyUsage } from "@/lib/llm/dailyUsage";
+import { setQuota } from "@/lib/llm/runtime";
 import { escapeMarkdownV2, sendTelegramMessage, trySendTelegramMessage } from "@/lib/telegram";
 import {
   EXTRACT_DUE_DATE_FOR,
@@ -50,6 +53,13 @@ type SyncResult = {
   inserted: number;
   ignored: number;
   llmCalls: number;
+  // Actual HTTP calls per model id, including retries. llmCalls above counts
+  // *intended* calls (one per message needing classification); this counts what the
+  // provider actually saw, which is the number that maps to the bill.
+  llmCallsByModel: Record<string, number>;
+  // How many messages had to be answered by the fallback model. A steady nonzero
+  // here means the primary is degraded, not that the fallback is doing its job well.
+  fallbackAnswers: number;
   remindersSent: number;
   remaining: number;
   ranOutOfTime: boolean;
@@ -71,7 +81,12 @@ type MessageOutcome =
   // no point trying the rest of the run — every remaining call fails the same way.
   | { status: "rateLimited"; message: string }
   | { status: "error"; message: string }
-  | { status: "store"; values: typeof applications.$inferInsert; notify: boolean };
+  | {
+      status: "store";
+      values: typeof applications.$inferInsert;
+      notify: boolean;
+      usedFallback: boolean;
+    };
 
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
@@ -89,6 +104,8 @@ export async function GET(req: NextRequest) {
     inserted: 0,
     ignored: 0,
     llmCalls: 0,
+    llmCallsByModel: {},
+    fallbackAnswers: 0,
     remindersSent: 0,
     remaining: 0,
     ranOutOfTime: false,
@@ -100,6 +117,25 @@ export async function GET(req: NextRequest) {
   // Shared across the whole run. Handed to processMessage so concurrent workers draw
   // from one pool rather than each getting their own allowance.
   const llmBudget = { remaining: LLM_CALLS_PER_RUN, used: 0 };
+
+  // The per-DAY ceiling, seeded from the database. Without this a serverless run
+  // starts from zero on every invocation, which is the same as having no ceiling.
+  // Deltas are flushed after every batch below, not just at the end, so a run that
+  // dies halfway does not un-spend what it already spent.
+  const day = ownerDayKey();
+  const quota = setQuota(await loadDailyUsage(day));
+  const flushUsage = async () => {
+    const deltas = quota.deltas();
+    quota.clearDeltas();
+    result.llmCallsByModel = mergeCounts(result.llmCallsByModel, deltas);
+    try {
+      await recordDailyUsage(day, deltas);
+    } catch (err) {
+      // Losing the write is bad (the day's cap drifts high) but killing the run over
+      // it is worse — the classifications themselves are already banked.
+      result.errors.push(`usage write: ${describe(err)}`);
+    }
+  };
 
   try {
     const gmail = await getGmailClient();
@@ -144,9 +180,11 @@ export async function GET(req: NextRequest) {
       const outcomes = await Promise.all(batch.map((id) => processMessage(gmail, id, llmBudget)));
       result.processed += batch.length;
       result.llmCalls = llmBudget.used;
+      await flushUsage();
 
       for (const outcome of outcomes) {
         if (outcome.status === "error") result.errors.push(outcome.message);
+        if (outcome.status === "store" && outcome.usedFallback) result.fallbackAnswers++;
         if (outcome.status === "rateLimited" && !result.wasRateLimited) {
           // Report the throttle once, not once per message. The remaining messages
           // are untouched and get picked up whenever the quota comes back.
@@ -211,6 +249,7 @@ export async function GET(req: NextRequest) {
 
     await runReminderPass(result, hasTimeLeft);
   } catch (err) {
+    await flushUsage();
     result.errors.push(describe(err));
     console.error("[sync] failed", err);
     await alertOnProblems(result, describe(err));
@@ -233,47 +272,61 @@ async function processMessage(
     // when you click into it, not just the list snippet.
     const full = await gmail.users.messages.get({ userId: "me", id: messageId, format: "full" });
 
-    const headers = full.data.payload?.headers ?? [];
-    const subject = headers.find((h) => h.name === "Subject")?.value ?? "(no subject)";
-    const from = headers.find((h) => h.name === "From")?.value ?? "";
+    const headerList = full.data.payload?.headers ?? [];
+    const headers = toHeaderMap(headerList);
+    const subject = headers["subject"] || "(no subject)";
+    const from = headers["from"] ?? "";
     const snippet = full.data.snippet ?? "";
     const { text: extractedText, html: bodyHtml } = extractMessageContent(full.data.payload);
     const receivedAt = new Date(Number(full.data.internalDate ?? Date.now()));
+    const body = extractedText || snippet;
 
-    // Keyword rules first: free, instant, and they catch the majority of real
-    // pipeline mail. Only genuinely ambiguous messages are worth an LLM call.
-    let category = keywordClassify(subject, snippet);
+    // Every message that survives the free prefilter costs one LLM call, with no
+    // keyword shortcut in front of it. That shortcut used to decide from the subject
+    // line alone, which filed "Thank you for your application" emails as Applied
+    // without ever reading the assessment link and deadline in the body. See
+    // src/lib/classify/index.ts.
+    if (llmBudget.remaining <= 0) return { status: "defer" };
+    llmBudget.remaining--;
+    llmBudget.used++;
 
-    if (!category) {
-      if (llmBudget.remaining <= 0) return { status: "defer" };
-      llmBudget.remaining--;
-      llmBudget.used++;
+    const classification = await classifyEmail({
+      subject,
+      from,
+      to: headers["to"] ?? "",
+      cc: headers["cc"] ?? "",
+      body,
+      snippet,
+      headers,
+    });
 
-      const llmResult = await llmClassify(subject, snippet);
-      if (llmResult === "Skip") return { status: "ignore", messageId };
-      category = llmResult;
-    }
+    if (classification.decision === "skip") return { status: "ignore", messageId };
+    const { category } = classification;
 
     // Due-date extraction is a second LLM call, so it draws from the same budget.
     // Missing a due date is recoverable (the arrival ping still fires); blowing the
-    // daily quota is not.
+    // daily quota is not. Reads the body for the same reason the classifier does —
+    // "complete by Friday 5pm" is rarely inside the first 200 characters.
     let reminderDueAt: Date | null = null;
     if (EXTRACT_DUE_DATE_FOR.includes(category) && llmBudget.remaining > 0) {
       llmBudget.remaining--;
       llmBudget.used++;
-      reminderDueAt = await extractDueDate(subject, snippet, receivedAt);
+      reminderDueAt = await extractDueDate(subject, body, receivedAt);
     }
 
     return {
       status: "store",
       notify: NOTIFY_ON_ARRIVAL.includes(category),
+      usedFallback: classification.usedFallback,
       values: {
+        classifiedBy: classification.model,
+        classifierEvidence: classification.evidence,
         gmailMessageId: messageId,
         company: extractCompany(from, subject),
         category,
         subject,
         snippet,
-        body: extractedText || snippet,
+        body,
         bodyHtml,
         fromEmail: extractEmail(from),
         receivedAt,
@@ -282,11 +335,16 @@ async function processMessage(
     };
   } catch (err) {
     // Left unrecorded on purpose: the next run re-lists it while it is still inside
-    // the lookback window, so a transient Gmail or Groq failure self-heals. A rate
-    // limit specifically must never be banked as "not job related" — that would
-    // permanently discard real mail because of a temporary quota problem.
+    // the lookback window, so a transient Gmail or provider failure self-heals. A
+    // rate limit specifically must never be banked as "not job related" — that would
+    // permanently discard real mail because of a temporary quota problem. The same
+    // goes for LlmUnavailableError: every model failing is a reason to try again
+    // later, never a reason to conclude the email was not about a job.
     console.error("[sync] failed on message", messageId, err);
     const message = `message ${messageId}: ${describe(err)}`;
+    if (err instanceof LlmUnavailableError) {
+      return err.isThrottled ? { status: "rateLimited", message } : { status: "error", message };
+    }
     if (isRateLimit(err)) return { status: "rateLimited", message };
     return { status: "error", message };
   }
@@ -374,7 +432,7 @@ async function alertOnProblems(result: SyncResult, fatalError: string | null) {
   if (result.wasRateLimited) {
     lines.push(
       escapeMarkdownV2(
-        `Groq is rate limiting. Stopped early with ${result.remaining} message(s) left; they retry once quota returns.`
+        `The classifier is being rate limited. Stopped early with ${result.remaining} message(s) left; they retry once quota returns.`
       )
     );
   }
@@ -410,6 +468,33 @@ function formatReminderMessage(
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// Gmail returns headers as a list and does not normalise the case of the names, so
+// "Message-ID" and "Message-Id" both occur in the wild. Lowercasing once here means
+// every reader downstream (prefilter's bulk-header checks, the To/Cc lookup) can use
+// a plain lowercase key.
+function toHeaderMap(headers: gmail_v1.Schema$MessagePartHeader[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const header of headers) {
+    if (!header.name) continue;
+    const key = header.name.toLowerCase();
+    // First wins. A duplicated Subject or From is a spoofing trick, and the first
+    // occurrence is the one Gmail itself displays.
+    if (map[key] === undefined) map[key] = header.value ?? "";
+  }
+  return map;
+}
+
+function mergeCounts(
+  into: Record<string, number>,
+  deltas: Record<string, number>
+): Record<string, number> {
+  const merged = { ...into };
+  for (const [key, value] of Object.entries(deltas)) {
+    merged[key] = (merged[key] ?? 0) + value;
+  }
+  return merged;
 }
 
 // Pulls both a plain-text and an HTML rendering out of a Gmail message payload.

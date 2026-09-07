@@ -4,11 +4,11 @@ import { isRateLimit } from "./isRateLimit";
 describe("isRateLimit", () => {
   test("recognises the Groq daily-quota error verbatim", () => {
     // Arrange: this is the real string that came back from production, wrapped by
-    // groqComplete. Recognising it is what lets the run stop instead of burning
+    // the model client. Recognising it is what lets the run stop instead of burning
     // its whole budget on calls that cannot succeed.
     const err = new Error(
       'Groq request failed: 429 {"error":{"message":"Rate limit reached for model ' +
-        "`groq/compound-mini` in organization `org_01jz` service tier `on_demand` on " +
+        "`google/gemini-2.5-flash-lite` in organization `org_01jz` service tier `on_demand` on " +
         'requests per day (RPD): Limit 250, Used 250, Requested 1.","type":"requests",' +
         '"code":"rate_limit_exceeded"}}'
     );
@@ -28,7 +28,7 @@ describe("isRateLimit", () => {
     // Arrange: these must keep flowing through the ordinary error path. Treating a
     // Gmail 404 as a rate limit would abandon the rest of the run for no reason.
     expect(isRateLimit(new Error("Gmail request failed: 404 not found"))).toBe(false);
-    expect(isRateLimit(new Error("GROQ_API_KEY not set"))).toBe(false);
+    expect(isRateLimit(new Error("OPENROUTER_API_KEY not set"))).toBe(false);
     expect(isRateLimit(new Error("connect ETIMEDOUT"))).toBe(false);
   });
 

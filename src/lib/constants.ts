@@ -13,15 +13,18 @@ export const OWNER_TIME_ZONE = process.env.OWNER_TIME_ZONE || "America/Chicago";
 export const SYNC_TIME_BUDGET_MS = 45_000;
 
 // How many messages are fetched and classified at once. Each one is a Gmail round
-// trip plus up to one Groq call, so this is latency-bound, not CPU-bound. Too high
-// and Gmail starts returning 429s.
+// trip plus one or two OpenRouter calls, so this is latency-bound, not CPU-bound.
+// Too high and Gmail starts returning 429s. The LLM side is paced separately by the
+// per-model token bucket in llm/rateLimiter.ts, which is what keeps a burst of
+// concurrent workers under the provider's per-minute tolerance.
 export const SYNC_CONCURRENCY = 6;
 
-// Hard ceiling on LLM classification calls in a single run. Groq's free tier allows
-// 250 requests per DAY, so an unbounded run drains the entire quota in one go and
-// every later run fails outright. Anything past the budget is simply left for the
-// next tick, which drains a backlog gradually instead of falling off a cliff.
-export const LLM_CALLS_PER_RUN = 40;
+// Hard ceiling on LLM calls in a single run — classification plus due-date
+// extraction, drawn from one pool. Its job is bounding the blast radius of one bad
+// run (a prompt regression, a backlog spike), not managing spend: the durable
+// per-day cap in llm/models.ts does that. Anything past the budget is simply left
+// for the next tick, which drains a backlog gradually instead of falling off a cliff.
+export const LLM_CALLS_PER_RUN = 80;
 
 // How far ahead a reminder counts as "coming up" — both for the repeating
 // Telegram nudge the sync job sends, and for what the dashboard's Upcoming
