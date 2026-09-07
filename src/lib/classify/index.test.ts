@@ -65,6 +65,47 @@ describe("classifyEmail", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("does not charge the budget for a message the prefilter rejects for free", async () => {
+    // Arrange: a run reported hitting an 80-call budget after 26 real calls, because
+    // the other 54 were prefilter rejections charged anyway. The backlog drained at a
+    // third of the rate it should have.
+    let reserved = 0;
+    const budget = { tryReserve: () => (reserved++, true) };
+
+    // Act
+    const result = await classifyEmail(
+      email({ from: "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>", subject: "9 new jobs for you" }),
+      budget
+    );
+
+    // Assert
+    expect(result.decision).toBe("skip");
+    expect(reserved).toBe(0);
+  });
+
+  test("charges the budget exactly once for a message that needs the model", async () => {
+    // Arrange
+    fetchMock.mockResolvedValueOnce(answer({ isJob: true, category: "Applied", evidence: "received" }));
+    let reserved = 0;
+    const budget = { tryReserve: () => (reserved++, true) };
+
+    // Act
+    await classifyEmail(email(), budget);
+
+    // Assert
+    expect(reserved).toBe(1);
+  });
+
+  test("defers without deciding anything when the budget is spent", async () => {
+    // Arrange: a deferred message must be left completely untouched. Recording it as
+    // a skip would bank a decision the classifier never made.
+    const result = await classifyEmail(email(), { tryReserve: () => false });
+
+    // Assert
+    expect(result).toEqual({ decision: "deferred" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("sends the whole body to the model, not just the subject and snippet", async () => {
     // Arrange: this is the fix for the expensive failure. The subject says Applied,
     // the assessment is 400 characters down, and the old keyword pass returned before

@@ -44,7 +44,23 @@ export type ClassifiableEmail = {
   headers: Record<string, string>;
 };
 
+// Lets the caller cap how many LLM calls a run makes, without the caller having to
+// know which emails will need one. Reserved only after the free prefilter has had its
+// say, so bulk advertising costs nothing against the budget.
+//
+// It did before, and the effect was not subtle: a run reported hitting an 80-call
+// budget after 26 real calls, because the other 54 messages were rejected for free
+// and charged anyway. The backlog drained at a third of the rate it should have, and
+// the Telegram alert blamed a quota that had not been touched.
+export type ClassifierBudget = {
+  // Returns false when the run is out of allowance. Consumes one when it returns true.
+  tryReserve: () => boolean;
+};
+
 export type Classification =
+  // Needs an LLM call and the caller's budget is spent. Nothing was decided and
+  // nothing must be recorded — the next run picks it up.
+  | { decision: "deferred" }
   // Not part of his pipeline. Safe to bank in ignored_messages and never look at again.
   | { decision: "skip"; reason: string; source: "prefilter" | "llm" }
   // Store it under this category.
@@ -61,11 +77,17 @@ export type Classification =
 // Throws LlmUnavailableError (or LlmError) when the models cannot be reached or
 // cannot be understood. That is not a skip and must never be recorded as one — the
 // caller leaves the message unrecorded so the next run retries it.
-export async function classifyEmail(email: ClassifiableEmail): Promise<Classification> {
+export async function classifyEmail(
+  email: ClassifiableEmail,
+  budget?: ClassifierBudget
+): Promise<Classification> {
   const verdictFromPrefilter = prefilter(toPrefilterInput(email));
   if (verdictFromPrefilter.decision === "reject") {
     return { decision: "skip", reason: verdictFromPrefilter.reason, source: "prefilter" };
   }
+
+  // Reserved here and not a line earlier. Everything above this point is free.
+  if (budget && !budget.tryReserve()) return { decision: "deferred" };
 
   const input = buildClassifierInput(
     toClassifierEmail(email, verdictFromPrefilter.bulkSignals)

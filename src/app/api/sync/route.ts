@@ -286,20 +286,30 @@ async function processMessage(
     // line alone, which filed "Thank you for your application" emails as Applied
     // without ever reading the assessment link and deadline in the body. See
     // src/lib/classify/index.ts.
-    if (llmBudget.remaining <= 0) return { status: "defer" };
-    llmBudget.remaining--;
-    llmBudget.used++;
+    //
+    // The budget is handed in rather than spent here, so it is charged only once the
+    // prefilter has declined to reject the message for free.
+    const classification = await classifyEmail(
+      {
+        subject,
+        from,
+        to: headers["to"] ?? "",
+        cc: headers["cc"] ?? "",
+        body,
+        snippet,
+        headers,
+      },
+      {
+        tryReserve: () => {
+          if (llmBudget.remaining <= 0) return false;
+          llmBudget.remaining--;
+          llmBudget.used++;
+          return true;
+        },
+      }
+    );
 
-    const classification = await classifyEmail({
-      subject,
-      from,
-      to: headers["to"] ?? "",
-      cc: headers["cc"] ?? "",
-      body,
-      snippet,
-      headers,
-    });
-
+    if (classification.decision === "deferred") return { status: "defer" };
     if (classification.decision === "skip") return { status: "ignore", messageId };
     const { category } = classification;
 
