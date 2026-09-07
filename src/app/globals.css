@@ -483,6 +483,15 @@ tr:last-child td {
   word-break: break-word;
   color: var(--ink);
 }
+/* Shown under the plain-text body while the formatted version is still in flight.
+   The text above it is already readable, so this is a note rather than a spinner —
+   it says "there is more coming", not "you cannot read this yet". */
+.detail-loading {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
 /* The sandboxed email-content iframe (see EmailHtmlFrame in ApplicationsPanel.tsx).
    Fixed height + its own scrollbar, same "bounded panel, internal scroll" pattern
    as .split-list and the old .table-scroll — the email can be any length, the

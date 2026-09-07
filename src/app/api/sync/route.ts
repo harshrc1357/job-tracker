@@ -392,20 +392,51 @@ async function runReminderPass(result: SyncResult, hasTimeLeft: () => boolean) {
       continue;
     }
 
-    // Send first, then record. A failed send must not burn a count, so the row stays
-    // eligible and the next tick retries it.
+    // Claim the nudge before sending it, with a compare-and-swap on the count we
+    // just read. This is the only thing standing between two overlapping runs and a
+    // duplicate ping: the insert path is protected by onConflictDoNothing, but this
+    // one was a plain read-then-write, so both runs could see reminderCount 0, both
+    // send, and both write 1.
+    //
+    // Whichever run's UPDATE lands first changes the count, so the other's WHERE no
+    // longer matches, it gets zero rows back, and it sends nothing.
+    const claimed = await db
+      .update(applications)
+      .set({
+        reminderCount: decision.nextCount,
+        lastReminderAt: now,
+        reminderSent: decision.isFinal,
+      })
+      .where(and(eq(applications.id, app.id), eq(applications.reminderCount, app.reminderCount)))
+      .returning({ id: applications.id });
+
+    // Another run got there first. Not an error, and not worth reporting.
+    if (claimed.length === 0) continue;
+
     try {
       await sendTelegramMessage(formatReminderMessage(app, decision.nextCount));
-      await db
-        .update(applications)
-        .set({
-          reminderCount: decision.nextCount,
-          lastReminderAt: now,
-          reminderSent: decision.isFinal,
-        })
-        .where(eq(applications.id, app.id));
       result.remindersSent++;
     } catch (err) {
+      // Release the claim. Claiming before sending is what stops a double ping, but
+      // it would otherwise burn a count on a nudge that never arrived — the exact
+      // thing the old send-then-record order existed to prevent. Rolling back keeps
+      // both properties: no duplicates, and no silently spent reminder.
+      try {
+        await db
+          .update(applications)
+          .set({
+            reminderCount: app.reminderCount,
+            lastReminderAt: app.lastReminderAt,
+            reminderSent: false,
+          })
+          .where(eq(applications.id, app.id));
+      } catch (rollbackErr) {
+        // Worst case the row keeps a count it did not use, costing one nudge out of
+        // MAX_REMINDERS_PER_APPLICATION. Reported, not thrown — the send failure
+        // below is the more useful error to surface.
+        console.error("[sync] failed to release reminder claim", app.id, rollbackErr);
+      }
+
       result.errors.push(`reminder ${app.id}: ${describe(err)}`);
       console.error("[sync] reminder failed for application", app.id, err);
     }

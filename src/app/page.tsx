@@ -3,11 +3,39 @@ import { applications } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { CATEGORIES, isReminderCategory, type Category } from "@/lib/categories";
 import { MAX_REMINDERS_PER_APPLICATION, REMINDER_WINDOW_HOURS } from "@/lib/constants";
-import { ApplicationsPanel } from "./ApplicationsPanel";
+import { ApplicationsPanel, type ApplicationListRow } from "./ApplicationsPanel";
 
 export const dynamic = "force-dynamic";
 
-type Row = typeof applications.$inferSelect;
+type Row = ApplicationListRow;
+
+// Every column the list, the search box, the stat cards and the reminders panel
+// actually read. Deliberately written out rather than `select()`, because the one
+// column missing from it is the entire point.
+//
+// bodyHtml is the sanitized full HTML of every email, and at 212 rows it was 1863 kB
+// of a 2142 kB page payload — 87% of the bytes, shipped on every single load, to
+// render one email that the user has not clicked yet. It is now fetched per message
+// from /api/applications/[id] when a row is selected.
+//
+// body (the plain-text rendering) stays: it is only 279 kB across the whole table and
+// matchesQuery searches it, which is what makes searching a role title or a
+// recruiter's name find ATS mail whose subject line mentions neither. It also means
+// the detail pane has text to show instantly while the HTML is still in flight.
+const LIST_COLUMNS = {
+  id: applications.id,
+  company: applications.company,
+  role: applications.role,
+  category: applications.category,
+  subject: applications.subject,
+  snippet: applications.snippet,
+  body: applications.body,
+  fromEmail: applications.fromEmail,
+  receivedAt: applications.receivedAt,
+  reminderDueAt: applications.reminderDueAt,
+  reminderCount: applications.reminderCount,
+  reminderSent: applications.reminderSent,
+} as const;
 
 export default async function DashboardPage() {
   if (!isDbConfigured) {
@@ -16,7 +44,10 @@ export default async function DashboardPage() {
 
   let all: Row[] = [];
   try {
-    all = await db.select().from(applications).orderBy(desc(applications.receivedAt));
+    all = await db
+      .select(LIST_COLUMNS)
+      .from(applications)
+      .orderBy(desc(applications.receivedAt));
   } catch (err) {
     return <SetupNotice reason="Couldn't reach the database. Check DATABASE_URL." detail={String(err)} />;
   }

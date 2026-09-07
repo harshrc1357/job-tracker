@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { applications } from "@/db/schema";
 import { CATEGORIES, CATEGORY_BADGE_CLASS, type Category } from "@/lib/categories";
 
-type Row = typeof applications.$inferSelect;
+// Everything except bodyHtml. The server sends this shape for every row; the HTML
+// body is fetched one message at a time from /api/applications/[id] on click, because
+// shipping all of it up front was 87% of the page payload (see LIST_COLUMNS in
+// page.tsx).
+export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
+
+type Row = ApplicationListRow;
 type Tab = "All" | Category;
 
 const TABS: Tab[] = ["All", ...CATEGORIES];
@@ -85,6 +91,51 @@ function EmailHtmlFrame({ html }: { html: string }) {
   );
 }
 
+// Fetches one email's HTML body on demand and remembers it for the rest of the page's
+// life, so clicking back and forth between two messages costs one request each, not
+// one per click.
+//
+// `null` html is a real answer, not a missing one: plenty of ATS senders post
+// text/plain only. The caller distinguishes "still loading" (undefined) from "loaded,
+// and there is no HTML" (null) so it can fall back to the plain text rather than
+// showing a spinner forever.
+function useEmailHtml(id: number | null): { html: string | null | undefined; failed: boolean } {
+  const [cache, setCache] = useState<Record<number, string | null>>({});
+  const [failed, setFailed] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (id === null || id in cache) return;
+
+    // Guards against a slow response for a message the user has already clicked away
+    // from overwriting the state for the one they are now looking at.
+    let cancelled = false;
+
+    fetch(`/api/applications/${id}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { bodyHtml: string | null }) => {
+        if (cancelled) return;
+        setCache((prev) => ({ ...prev, [id]: data.bodyHtml ?? null }));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // Not fatal. The plain-text body is already on the client, so the detail pane
+        // still shows the email — just without the original formatting.
+        console.error("[dashboard] failed to load email body", err);
+        setFailed((prev) => ({ ...prev, [id]: true }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, cache]);
+
+  if (id === null) return { html: undefined, failed: false };
+  return { html: cache[id], failed: failed[id] ?? false };
+}
+
 // Click an email in the list, read the whole thing on the right — same pattern as
 // any inbox. Filtering by category and picking an email are both client-side state
 // over data the server component already fetched, so this is the one interactive
@@ -116,6 +167,7 @@ export function ApplicationsPanel({ applications: rows }: { applications: Row[] 
   );
 
   const selected = filtered.find((row) => row.id === selectedId) ?? null;
+  const { html: selectedHtml, failed: htmlFailed } = useEmailHtml(selected?.id ?? null);
 
   function selectTab(tab: Tab) {
     setActiveTab(tab);
@@ -216,11 +268,19 @@ export function ApplicationsPanel({ applications: rows }: { applications: Row[] 
                   {formatFullDate(selected.receivedAt)}
                 </div>
               </div>
-              {selected.bodyHtml ? (
-                <EmailHtmlFrame key={selected.id} html={selected.bodyHtml} />
+              {/* The plain text is already on the client, so it renders immediately
+                  and is replaced by the original HTML the moment that arrives. No
+                  spinner and no empty pane: the worst case is you read the email
+                  unformatted for a few hundred milliseconds, or permanently if the
+                  fetch fails. */}
+              {selectedHtml ? (
+                <EmailHtmlFrame key={selected.id} html={selectedHtml} />
               ) : (
                 <div className="detail-body">
                   {selected.body?.trim() || selected.snippet || "No content synced for this email."}
+                  {selectedHtml === undefined && !htmlFailed && (
+                    <div className="detail-loading">Loading the formatted email…</div>
+                  )}
                 </div>
               )}
             </>
