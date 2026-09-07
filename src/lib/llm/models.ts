@@ -8,10 +8,28 @@
 // OpenRouter itself imposes no per-request cap on paid model variants (only ":free"
 // ones are capped, at 20/min and 50-1000/day depending on lifetime credit). What
 // actually throttles us is the upstream provider plus Cloudflare in front of
-// OpenRouter, and neither publishes a number. So the limits below are self-imposed
-// pacing, deliberately conservative: being paced by us costs milliseconds, being
-// paced by them costs a 429, a retry, and real job mail left unclassified for
-// another cycle.
+// OpenRouter, and neither publishes a number. So the per-minute figures below are
+// self-imposed pacing: being paced by us costs milliseconds, being paced by them
+// costs a 429, a retry, and real job mail left unclassified for another cycle.
+//
+// The per-minute number is derived rather than picked. Only SYNC_CONCURRENCY workers
+// ever run at once and each is one in-flight HTTP request, so the fastest this code
+// can physically issue calls is SYNC_CONCURRENCY per second — 360/min at a
+// concurrency of 6. That is the whole useful range:
+//
+//   set it above 360  -> the bucket never empties and the limiter does nothing
+//   set it below 360  -> we throttle our own concurrency for no external reason
+//
+// So it sits exactly at the ceiling. The limiter then acts purely as a backstop
+// against SYNC_CONCURRENCY being raised later without anyone rechecking this file,
+// and the default burst (requestsPerMinute / 60) lands on 6, which is one batch.
+//
+// The per-DAY figures are a cost ceiling, not a provider limit, and they are sized
+// against measured volume: this inbox produces ~21 stored job emails a day (14-day
+// average) against a worst observed day of 56, and the free prefilter kills roughly
+// half of everything before it reaches a model. That puts steady state near 85 calls
+// a day and a bad day near 450. 1000 per model is ~2x the worst day observed.
+const MAX_REQUESTS_PER_MINUTE = 360;
 
 export type ModelConfig = {
   // OpenRouter model slug, verified against GET /api/v1/models.
@@ -28,17 +46,24 @@ export type ModelConfig = {
 // the daily ceiling below is worth about 17 cents.
 export const PRIMARY_MODEL: ModelConfig = {
   id: "google/gemini-2.5-flash-lite",
-  requestsPerMinute: 300,
+  requestsPerMinute: MAX_REQUESTS_PER_MINUTE,
   requestsPerDay: 1_000,
 };
 
 // Only used when the primary is throttling, erroring, or out of daily budget.
-// gpt-5-nano is half the input price and a different upstream provider, so a
-// Google-side outage does not take the whole classifier down with it.
+// gpt-5-nano is half the input price ($0.05/M in, $0.40/M out) and a different
+// upstream provider, so a Google-side outage does not take the whole classifier down
+// with it.
+//
+// Given the same 1000/day as the primary on purpose. A fallback sized smaller than
+// the thing it backs up is not a fallback: the failure it exists for is the primary
+// being unavailable for a whole day, and a 300-call ceiling would have covered a
+// third of that day and then gone dark. It is also the cheaper model, so matching the
+// ceiling costs less than the primary's does.
 export const FALLBACK_MODEL: ModelConfig = {
   id: "openai/gpt-5-nano",
-  requestsPerMinute: 120,
-  requestsPerDay: 300,
+  requestsPerMinute: MAX_REQUESTS_PER_MINUTE,
+  requestsPerDay: 1_000,
 };
 
 export const MODEL_CHAIN: readonly ModelConfig[] = [PRIMARY_MODEL, FALLBACK_MODEL];
