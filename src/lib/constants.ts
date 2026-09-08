@@ -26,6 +26,15 @@ export const SYNC_CONCURRENCY = 6;
 // for the next tick, which drains a backlog gradually instead of falling off a cliff.
 export const LLM_CALLS_PER_RUN = 80;
 
+// Floor on how often a sync may actually run, whoever asks for it.
+//
+// This is what makes /api/sync safe to expose without a secret: the cost of being
+// called is bounded by the clock rather than by who is calling. Set just under the
+// 5-minute cron so ordinary jitter in the trigger never gets a legitimate tick
+// rejected, and far enough above a run's ~30s duration that the claim doubles as a
+// mutual-exclusion lock (see lib/syncClaim.ts).
+export const MIN_SYNC_INTERVAL_MS = 4 * 60 * 1000;
+
 // How far ahead a reminder counts as "coming up" — both for the repeating
 // Telegram nudge the sync job sends, and for what the dashboard's Upcoming
 // reminders panel considers worth showing.

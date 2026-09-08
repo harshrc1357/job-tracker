@@ -19,9 +19,11 @@ import {
 import {
   LLM_CALLS_PER_RUN,
   MAX_REMINDERS_PER_APPLICATION,
+  MIN_SYNC_INTERVAL_MS,
   SYNC_CONCURRENCY,
   SYNC_TIME_BUDGET_MS,
 } from "@/lib/constants";
+import { claimSyncSlot } from "@/lib/syncClaim";
 import { decideReminder } from "@/lib/reminderPolicy";
 import { isRateLimit } from "@/lib/isRateLimit";
 import { sanitizeEmailHtml } from "@/lib/sanitizeEmailHtml";
@@ -88,10 +90,62 @@ type MessageOutcome =
       usedFallback: boolean;
     };
 
+// Triggering a sync no longer requires a secret, and that is a deliberate trade,
+// not a loosening.
+//
+// The secret used to be the only thing standing between a stranger and (a) burning
+// the LLM budget and (b) reading email subjects out of the response. But it had to
+// live wherever the trigger lived — GitHub's servers today, a third-party cron
+// service tomorrow — so every reliable trigger meant handing the credential to one
+// more party. GitHub's scheduler delivers roughly 2.5% of a */5 cron, so a better
+// trigger was needed, which meant another copy of the secret.
+//
+// Instead both risks are removed at the source:
+//
+//   spend  -> claimSyncSlot caps real runs at one per MIN_SYNC_INTERVAL_MS, on top
+//             of the existing per-run and per-day LLM caps. Being hammered costs
+//             exactly what the ordinary cron costs.
+//   data   -> an unauthenticated caller gets {ok:true} and nothing else. The counts
+//             and the errors array (which quotes subjects and sender names) are only
+//             returned to a caller holding CRON_SECRET.
+//
+// The endpoint takes no caller-controlled input, so it cannot be steered: it always
+// does the same one job against the owner's own mailbox. And the dashboard, which is
+// where the actual email content lives, is untouched behind Google sign-in.
+//
+// CRON_SECRET therefore stops being an access control and becomes a debug switch.
+function isTrustedCaller(req: NextRequest): boolean {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) return false;
+
+  // Header first: query strings end up in Vercel's logs, the caller's logs, and any
+  // proxy in between. The query param stays supported so the existing GitHub Actions
+  // workflow keeps working unchanged.
+  const header = req.headers.get("authorization");
+  if (header === `Bearer ${expected}`) return true;
+
+  return req.nextUrl.searchParams.get("secret") === expected;
+}
+
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get("secret");
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const trusted = isTrustedCaller(req);
+
+  // Everything a caller without the secret is ever told. No counts, no error strings,
+  // and identical whether the sync ran, was throttled, or found nothing — so it
+  // cannot be used to probe for activity either.
+  const quiet = () => NextResponse.json({ ok: true });
+
+  const claim = await claimSyncSlot();
+  if (!claim.claimed && claim.reason === "too-soon") {
+    return trusted
+      ? NextResponse.json({ ok: true, skipped: "too-soon", minIntervalMs: MIN_SYNC_INTERVAL_MS })
+      : quiet();
+  }
+  if (!claim.claimed) {
+    // The bookkeeping row is unreachable. Proceeding unthrottled is the lesser evil:
+    // the LLM day/run caps still bound the spend, and refusing to sync because a
+    // timestamp could not be written would stop real mail over a trivial fault.
+    console.error("[sync] claim failed, proceeding unthrottled", claim.message);
   }
 
   const startedAt = Date.now();
@@ -253,11 +307,15 @@ export async function GET(req: NextRequest) {
     result.errors.push(describe(err));
     console.error("[sync] failed", err);
     await alertOnProblems(result, describe(err));
+    // 200 and silence for an untrusted caller even on failure. A 500 with a stack in
+    // it is exactly the kind of detail this endpoint should not hand to strangers,
+    // and the failure still reaches the owner over Telegram via alertOnProblems.
+    if (!trusted) return quiet();
     return NextResponse.json({ ok: false, ...result }, { status: 500 });
   }
 
   await alertOnProblems(result, null);
-  return NextResponse.json({ ok: true, ...result });
+  return trusted ? NextResponse.json({ ok: true, ...result }) : quiet();
 }
 
 // Fetches one message and works out what, if anything, to store for it. Returns
