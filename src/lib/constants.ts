@@ -6,11 +6,25 @@
 // against wherever the code happens to be running (UTC, on Vercel).
 export const OWNER_TIME_ZONE = process.env.OWNER_TIME_ZONE || "America/Chicago";
 
-// Wall-clock budget for one sync run. Vercel's Hobby plan kills the function at 60s
-// with a 504, and a killed run reports nothing at all — no counts, no errors. Coming
-// in under the axe deliberately means a slow run returns partial progress and says
-// how much is left, and the next tick picks up where it stopped.
-export const SYNC_TIME_BUDGET_MS = 45_000;
+// Wall-clock budget for one sync run. A slow run returns partial progress and says
+// how much is left, and the next tick picks up where it stopped, rather than being
+// killed mid-flight and reporting nothing.
+//
+// Two ceilings to stay under, and the tighter one wins:
+//   Vercel Hobby   kills the function at 60s with a 504.
+//   cron-job.org   closes the connection at 30s on the free plan (5 min for paying
+//                  members) and records the run as FAILED.
+//
+// That second one is the binding constraint now that an external pinger drives this.
+// The work would still finish server-side after a cut-off, but the pinger would log
+// a failure for a run that actually succeeded, and with "disable after too many
+// failures" enabled that eventually switches the job off. Silent death by false
+// alarm is exactly the failure mode this whole trigger rework exists to remove.
+//
+// 20s leaves ~10s of headroom for cold starts and the response itself. It costs
+// nothing in practice: a steady-state run has almost nothing to do, and a backlog
+// simply drains over a few more ticks, which is the intended behaviour anyway.
+export const SYNC_TIME_BUDGET_MS = 20_000;
 
 // How many messages are fetched and classified at once. Each one is a Gmail round
 // trip plus one or two OpenRouter calls, so this is latency-bound, not CPU-bound.
