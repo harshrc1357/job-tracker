@@ -15,7 +15,7 @@
 // It is one statement on purpose. A read-then-write would let two callers both see a
 // stale timestamp and both proceed, which is the exact bug this is here to prevent.
 
-import { sql } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { syncState } from "@/db/schema";
 import { MIN_SYNC_INTERVAL_MS } from "@/lib/constants";
@@ -45,7 +45,14 @@ export async function claimSyncSlot(now: Date = new Date()): Promise<ClaimOutcom
     const claimed = await db
       .update(syncState)
       .set({ lastSyncedAt: now })
-      .where(sql`${syncState.id} = 1 AND ${syncState.lastSyncedAt} < ${cutoff}`)
+      // Built with lt()/eq() rather than a raw sql`` template. A Date interpolated
+      // into a raw fragment carries no column context, so the driver never learns it
+      // is a timestamp: the old neon-http driver serialized it anyway, postgres-js
+      // throws "Received an instance of Date". The failure was invisible because the
+      // caller catches a failed claim and proceeds unthrottled — so the rate limit and
+      // the two-overlapping-runs guard were both silently off, which is precisely what
+      // this file exists to provide. lt() goes through the column's own mapper.
+      .where(and(eq(syncState.id, 1), lt(syncState.lastSyncedAt, cutoff)))
       .returning({ id: syncState.id });
 
     return claimed.length > 0 ? { claimed: true } : { claimed: false, reason: "too-soon" };
