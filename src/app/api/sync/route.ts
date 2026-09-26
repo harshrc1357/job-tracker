@@ -8,7 +8,7 @@ import { classifyEmail } from "@/lib/classify";
 import { extractDueDate } from "@/lib/extractDueDate";
 import { LlmUnavailableError } from "@/lib/llm/errors";
 import { loadDailyUsage, ownerDayKey, recordDailyUsage } from "@/lib/llm/dailyUsage";
-import { setQuota } from "@/lib/llm/runtime";
+import { getQuota, setQuota } from "@/lib/llm/runtime";
 import { escapeMarkdownV2, sendTelegramMessage, trySendTelegramMessage } from "@/lib/telegram";
 import {
   EXTRACT_DUE_DATE_FOR,
@@ -36,12 +36,27 @@ export const maxDuration = 60;
 //
 // Rolling window, not an absolute date range: an `after:/before:` pair goes stale the
 // moment the clock passes it, and the sync then silently returns zero new mail forever.
-const LOOKBACK_DAYS = 14;
-const JOB_QUERY =
-  `newer_than:${LOOKBACK_DAYS}d ` +
-  '(application OR interview OR assessment OR offer OR "thank you for applying" OR ' +
-  'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
-  '"security code" OR "verify your email" OR "confirm your email")';
+const DEFAULT_LOOKBACK_DAYS = 14;
+const MAX_LOOKBACK_DAYS = 365;
+
+// Read from the environment rather than hardcoded, so a one-off backfill can widen the
+// window without editing a constant and trusting someone to put it back. Forgetting to
+// revert would multiply the per-run Gmail fetches and LLM spend indefinitely, which is
+// exactly the kind of cost increase that hides until the bill arrives.
+function lookbackDays(): number {
+  const raw = Number(process.env.SYNC_LOOKBACK_DAYS);
+  if (!Number.isFinite(raw) || raw < 1) return DEFAULT_LOOKBACK_DAYS;
+  return Math.min(Math.floor(raw), MAX_LOOKBACK_DAYS);
+}
+
+function buildJobQuery(days: number): string {
+  return (
+    `newer_than:${days}d ` +
+    '(application OR interview OR assessment OR offer OR "thank you for applying" OR ' +
+    'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
+    '"security code" OR "verify your email" OR "confirm your email")'
+  );
+}
 
 const MAX_LISTED_MESSAGES = 500;
 
@@ -130,23 +145,16 @@ function isTrustedCaller(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   const trusted = isTrustedCaller(req);
 
+  // Trusted-only, and deliberately so. It is not a security boundary in the usual sense
+  // — the worst a stranger could do with it is make a sync quieter — but a public
+  // switch that silences alerts is one an attacker would reach for first, and there is
+  // no reason for it to exist outside a hand-run migration.
+  const isBackfill = trusted && req.nextUrl.searchParams.get("backfill") === "1";
+
   // Everything a caller without the secret is ever told. No counts, no error strings,
   // and identical whether the sync ran, was throttled, or found nothing — so it
   // cannot be used to probe for activity either.
   const quiet = () => NextResponse.json({ ok: true });
-
-  const claim = await claimSyncSlot();
-  if (!claim.claimed && claim.reason === "too-soon") {
-    return trusted
-      ? NextResponse.json({ ok: true, skipped: "too-soon", minIntervalMs: MIN_SYNC_INTERVAL_MS })
-      : quiet();
-  }
-  if (!claim.claimed) {
-    // The bookkeeping row is unreachable. Proceeding unthrottled is the lesser evil:
-    // the LLM day/run caps still bound the spend, and refusing to sync because a
-    // timestamp could not be written would stop real mail over a trivial fault.
-    console.error("[sync] claim failed, proceeding unthrottled", claim.message);
-  }
 
   const startedAt = Date.now();
   const hasTimeLeft = () => Date.now() - startedAt < SYNC_TIME_BUDGET_MS;
@@ -172,13 +180,15 @@ export async function GET(req: NextRequest) {
   // from one pool rather than each getting their own allowance.
   const llmBudget = { remaining: LLM_CALLS_PER_RUN, used: 0 };
 
-  // The per-DAY ceiling, seeded from the database. Without this a serverless run
-  // starts from zero on every invocation, which is the same as having no ceiling.
-  // Deltas are flushed after every batch below, not just at the end, so a run that
-  // dies halfway does not un-spend what it already spent.
   const day = ownerDayKey();
-  const quota = setQuota(await loadDailyUsage(day));
+
+  // Reads the live quota through getQuota() rather than closing over the object
+  // setQuota() returns, so this is safe to define before the quota has been seeded —
+  // which matters because seeding it is now a database call inside the try below, and
+  // the catch has to be able to flush whatever was spent before it failed. An unseeded
+  // quota simply has no deltas.
   const flushUsage = async () => {
+    const quota = getQuota();
     const deltas = quota.deltas();
     quota.clearDeltas();
     result.llmCallsByModel = mergeCounts(result.llmCallsByModel, deltas);
@@ -192,10 +202,35 @@ export async function GET(req: NextRequest) {
   };
 
   try {
+    // Both of these talk to the database, and both used to run BEFORE this try. A dead
+    // database therefore threw past every guard below: the route returned a bare 500
+    // with no body, the "untrusted callers only ever see a quiet 200" rule was
+    // bypassed, and no Telegram alert fired. cron-job.org saw four of those in a row
+    // and disabled the job, which is how a Neon quota outage turned into a silently
+    // stopped sync. Inside the try, the same failure is a quiet 200 plus an alert.
+    const claim = await claimSyncSlot();
+    if (!claim.claimed && claim.reason === "too-soon") {
+      return trusted
+        ? NextResponse.json({ ok: true, skipped: "too-soon", minIntervalMs: MIN_SYNC_INTERVAL_MS })
+        : quiet();
+    }
+    if (!claim.claimed) {
+      // The bookkeeping row is unreachable. Proceeding unthrottled is the lesser evil:
+      // the LLM day/run caps still bound the spend, and refusing to sync because a
+      // timestamp could not be written would stop real mail over a trivial fault.
+      console.error("[sync] claim failed, proceeding unthrottled", claim.message);
+    }
+
+    // The per-DAY ceiling, seeded from the database. Without this a serverless run
+    // starts from zero on every invocation, which is the same as having no ceiling.
+    // Deltas are flushed after every batch below, not just at the end, so a run that
+    // dies halfway does not un-spend what it already spent.
+    setQuota(await loadDailyUsage(day));
+
     const gmail = await getGmailClient();
     const list = await gmail.users.messages.list({
       userId: "me",
-      q: JOB_QUERY,
+      q: buildJobQuery(lookbackDays()),
       maxResults: MAX_LISTED_MESSAGES,
     });
     const messages = list.data.messages ?? [];
@@ -286,6 +321,11 @@ export async function GET(req: NextRequest) {
       result.inserted += insertedRows.length;
 
       for (const outcome of toStore) {
+        // A backfill re-imports mail that is days or weeks old into an empty database.
+        // Every Interview/Assessment/Offer row in it looks brand new to the code above,
+        // so without this the rebuild pushes dozens of stale interview invites at him
+        // in one burst, and a genuinely new one is indistinguishable in the flood.
+        if (isBackfill) continue;
         if (!outcome.notify) continue;
         if (!insertedIds.has(outcome.values.gmailMessageId)) continue;
         try {
