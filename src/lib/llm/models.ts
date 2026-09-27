@@ -62,6 +62,10 @@ export type ModelConfig = {
   // Cost ceiling, not a provider limit. One run cannot spend more than this many
   // calls against one model in a calendar day (owner's timezone).
   readonly requestsPerDay: number;
+  // Set ONLY for reasoning models. They spend max_tokens on hidden reasoning before
+  // emitting content, so a budget sized for a short JSON answer produces an empty
+  // completion. See openrouter.ts for the measurements.
+  readonly reasoningEffort?: "minimal" | "low" | "medium" | "high";
 };
 
 // $0.10/M input, $0.40/M output (verified against GET /api/v1/models, 2026-09-07).
@@ -87,6 +91,12 @@ export const FALLBACK_MODEL: ModelConfig = {
   id: "openai/gpt-5-nano",
   requestsPerMinute: MAX_REQUESTS_PER_MINUTE,
   requestsPerDay: requestsPerDay(),
+  // Without this the fallback NEVER worked. gpt-5-nano is a reasoning model: it burned
+  // all 192 available tokens thinking, hit the cap, and returned content null with
+  // finish_reason=length on every call. So the one thing standing between a Google
+  // outage and a dead classifier was itself dead, silently, and only surfaced as
+  // "empty completion" in an alert once the primary's daily budget ran out.
+  reasoningEffort: "minimal",
 };
 
 export const MODEL_CHAIN: readonly ModelConfig[] = [PRIMARY_MODEL, FALLBACK_MODEL];

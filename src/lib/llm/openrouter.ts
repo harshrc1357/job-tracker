@@ -59,6 +59,22 @@ export async function chat(model: ModelConfig, request: ChatRequest): Promise<Ch
         temperature: 0,
         max_tokens: request.maxTokens,
         ...(request.json ? { response_format: { type: "json_object" } } : {}),
+        // Reasoning models spend max_tokens on hidden reasoning BEFORE emitting any
+        // content, so a budget sized for a 40-token JSON answer is consumed entirely
+        // by thinking and the response comes back finish_reason=length with content
+        // null. gpt-5-nano did exactly that on every single call: measured 192
+        // reasoning tokens against a 220 cap, zero content, every time.
+        //
+        // The classifier's whole job is a two-question lookup against an explicit
+        // rubric. It does not benefit from chain-of-thought, so the reasoning is pure
+        // cost and pure latency. effort:"minimal" drops it to 0 tokens and returns
+        // valid JSON well inside the cap.
+        //
+        // Measured, not assumed: effort "minimal" -> finish=stop, reasoning=0, valid
+        // JSON. {enabled:false} is silently ignored by this endpoint and must not be
+        // used. Raising max_tokens to 1200 also works but pays for 320 reasoning
+        // tokens to reach the same answer.
+        ...(model.reasoningEffort ? { reasoning: { effort: model.reasoningEffort } } : {}),
         messages: [
           { role: "system", content: request.system },
           { role: "user", content: request.user },
