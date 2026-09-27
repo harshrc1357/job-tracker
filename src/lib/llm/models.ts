@@ -31,6 +31,29 @@
 // a day and a bad day near 450. 1000 per model is ~2x the worst day observed.
 const MAX_REQUESTS_PER_MINUTE = 360;
 
+// The per-day ceiling is a COST control, not a provider limit, so it is the one
+// number here that legitimately differs between callers. The always-on cron wants it
+// tight: a runaway loop against a 14-day window should cost cents, and 1,000 is
+// already ~2x the worst day this inbox has produced. A one-off backfill over a 45-day
+// window wants it loose, because the whole job is ~1,700 calls and a tight cap just
+// splits it across three days for no benefit.
+//
+// So it reads an env var rather than being hardcoded, and the DEFAULT stays tight.
+// That direction matters: forgetting to set it costs nothing, forgetting to unset it
+// is what turns a temporary allowance into a permanent bill. Vercel deliberately does
+// not set it — only the local .env the backfill runs from does.
+//
+// At ~$0.00017 a call, 1,000/day is about 17 cents of exposure per model and
+// 5,000/day is about 85 cents.
+const DEFAULT_REQUESTS_PER_DAY = 1_000;
+const MAX_REQUESTS_PER_DAY = 20_000;
+
+function requestsPerDay(): number {
+  const raw = Number(process.env.LLM_CALLS_PER_DAY);
+  if (!Number.isFinite(raw) || raw < 1) return DEFAULT_REQUESTS_PER_DAY;
+  return Math.min(Math.floor(raw), MAX_REQUESTS_PER_DAY);
+}
+
 export type ModelConfig = {
   // OpenRouter model slug, verified against GET /api/v1/models.
   readonly id: string;
@@ -47,7 +70,7 @@ export type ModelConfig = {
 export const PRIMARY_MODEL: ModelConfig = {
   id: "google/gemini-2.5-flash-lite",
   requestsPerMinute: MAX_REQUESTS_PER_MINUTE,
-  requestsPerDay: 1_000,
+  requestsPerDay: requestsPerDay(),
 };
 
 // Only used when the primary is throttling, erroring, or out of daily budget.
@@ -63,7 +86,7 @@ export const PRIMARY_MODEL: ModelConfig = {
 export const FALLBACK_MODEL: ModelConfig = {
   id: "openai/gpt-5-nano",
   requestsPerMinute: MAX_REQUESTS_PER_MINUTE,
-  requestsPerDay: 1_000,
+  requestsPerDay: requestsPerDay(),
 };
 
 export const MODEL_CHAIN: readonly ModelConfig[] = [PRIMARY_MODEL, FALLBACK_MODEL];

@@ -14,3 +14,6 @@ sync-last-response.json
 
 # Row snapshots written by scripts/reclassify.mts before it overwrites categories.
 backups/
+
+# Backfill run logs
+logs/

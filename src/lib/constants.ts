@@ -24,7 +24,16 @@ export const OWNER_TIME_ZONE = process.env.OWNER_TIME_ZONE || "America/Chicago";
 // 20s leaves ~10s of headroom for cold starts and the response itself. It costs
 // nothing in practice: a steady-state run has almost nothing to do, and a backlog
 // simply drains over a few more ticks, which is the intended behaviour anyway.
-export const SYNC_TIME_BUDGET_MS = 20_000;
+// This is the budget for WORK, and the response takes measurably longer than it: a
+// cold start, the Gmail list, the final writes and the Telegram alert all land
+// outside it. Measured against production, a 20s budget produced a 24.7s response,
+// which overran cron-job.org's timeout and failed the job even though the sync had
+// succeeded and returned 200.
+//
+// 12s leaves roughly 18s end to end, comfortably inside a 30s scheduler timeout with
+// room for a slow cold start. Cutting it costs nothing real: whatever does not fit is
+// simply picked up by the next tick, and at */15 there is always another tick.
+export const SYNC_TIME_BUDGET_MS = 12_000;
 
 // How many messages are fetched and classified at once. Each one is a Gmail round
 // trip plus one or two OpenRouter calls, so this is latency-bound, not CPU-bound.
