@@ -12,7 +12,9 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "backfill": "tsx --env-file=.env scripts/backfill.mts",
-    "backfill:bg": "scripts\backfill.cmd"
+    "backfill:bg": "scripts\backfill.cmd",
+    "db:secure": "node scripts/secure-database.mjs",
+    "db:secure:check": "node scripts/secure-database.mjs --check"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
