@@ -48,12 +48,12 @@ const promptOf = (call: unknown[]): string =>
 describe("classifyEmail: extracted facts", () => {
   test("a stored email carries the employer, role and round the model extracted, in the same single call", async () => {
     fetchMock.mockResolvedValueOnce(
-      answer({ isJob: true, category: "Interview", employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2, evidence: "round 2" })
+      answer({ isJob: true, category: "Interview", employer: "Cotiviti", via: "iCIMS", role: "Intern - Gen AI Research Engineer", round: 2, evidence: "round 2" })
     );
 
     const result = await classifyEmail(email({ from: "Cotiviti @ icims <noreply@icims.com>", subject: "Your Cotiviti interview" }));
 
-    expect(result).toMatchObject({ decision: "store", employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2 });
+    expect(result).toMatchObject({ decision: "store", employer: "Cotiviti", via: "iCIMS", role: "Intern - Gen AI Research Engineer", round: 2 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
@@ -217,6 +217,7 @@ describe("classifyEmail", () => {
       category: "Offer",
       evidence: "pleased to offer you",
       employer: null,
+      via: null,
       role: null,
       round: null,
       model: PRIMARY_MODEL.id,

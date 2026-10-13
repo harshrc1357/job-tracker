@@ -102,9 +102,10 @@ function decideFollowUp(email: EmailFacts, atEmployer: readonly OpenApplication[
     const scored = scoreRoles(email.role, open);
     const [best, second] = scored;
     if (best && (!second || best.score - second.score >= RIVAL_GAP)) {
-      return best.score >= STRONG
-        ? attach(best.applicationId, strongConfidence(best.score), "employer and role match")
-        : attach(best.applicationId, weakConfidence(best.score), "employer matches, role is a weaker match", { flagged: true });
+      if (best.score >= STRONG) return attach(best.applicationId, strongConfidence(best.score), "employer and role match");
+      // A rejection closes the application, so a loose role match is not enough to act on.
+      if (email.kind === "rejection") return ask(0.55, scored, "rejection matches the role only loosely; not closing anything");
+      return attach(best.applicationId, weakConfidence(best.score), "employer matches, role is a weaker match", { flagged: true });
     }
     if (best && second) return ask(0.55, scored, "two roles at this employer are too close to call");
 

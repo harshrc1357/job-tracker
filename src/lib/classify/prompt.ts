@@ -15,6 +15,8 @@ export type Verdict =
       // The real employer (Cotiviti), never the ATS or recruiter's domain. null when the
       // email does not say; the Linker asks rather than guessing.
       employer: string | null;
+      // The hiring platform that relayed the mail (iCIMS, Greenhouse). Metadata only.
+      via: string | null;
       // Job title including any term/cohort ("Spring 2027"). null when not stated.
       role: string | null;
       // Interview round when the email states one.
@@ -76,16 +78,17 @@ Categories:
 
 When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
 
-ALSO, if YES, extract three facts. Each is null when the email does not state it. Never guess.
+ALSO, if YES, extract four facts. Each is null when the email does not state it. Never guess.
 
 - "employer": the REAL employer he applied to (Cotiviti, Snowflake, Hewlett Packard Enterprise). Never the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), never "Hiring Team", and never a recruiter's own name. "Cotiviti @ icims" is Cotiviti. A recruiter at a staffing agency writing about a client: the client if named, otherwise null. Take it from the subject, the body, or the signature.
+- "via": the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), if the sender, links or footer show one. null for mail sent straight from the employer.
 - "role": the job title exactly as the email states it, KEEPING any term, cohort, team or location qualifier that distinguishes openings ("AI/ML SWE Intern - Spring 2027", "SWE Intern - Core Eng / Security"). Drop requisition ids. null if the email names no role.
 - "round": the interview round number if the email says one ("round 2", "second interview"), else null.
 
 Reply with ONLY a JSON object, no prose and no code fences. Keep this field order:
 {"isJob": true, "category": "<one of ${CATEGORIES.join(
   " | "
-)}>", "employer": "<real employer or null>", "role": "<job title or null>", "round": <number or null>, "evidence": "<up to 15 words quoted from the email that decided the category>"}
+)}>", "employer": "<real employer or null>", "via": "<hiring platform or null>", "role": "<job title or null>", "round": <number or null>, "evidence": "<up to 15 words quoted from the email that decided the category>"}
 or
 {"isJob": false, "reason": "<up to 10 words>"}`;
 
@@ -127,6 +130,7 @@ export function parseVerdict(raw: string, model: string): Verdict {
     category,
     evidence: asShortString(parsed.evidence),
     employer: asEmployer(parsed.employer),
+    via: asNullableText(parsed.via),
     role: asNullableText(parsed.role),
     round: asRound(parsed.round),
   };
@@ -182,6 +186,7 @@ function salvageTruncated(raw: string): Record<string, unknown> | null {
     isJob: true,
     category: category[1],
     employer: text("employer"),
+    via: text("via"),
     role: text("role"),
     round: round ? Number(round[1]) : null,
     evidence: "",

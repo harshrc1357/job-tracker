@@ -61,6 +61,12 @@ export const applications = pgTable("applications", {
   linkFlagged: boolean("link_flagged").notNull().default(false),
   // Interview round when the email stated one (extracted by the classifier).
   interviewRound: integer("interview_round"),
+  // What the classifier read as the real employer. `company` below stays the display name
+  // (it falls back to a sender-based guess); the Linker trusts only this column, so a
+  // sender name can never become an Employer. null = not extracted or not stated.
+  employer: text("employer"),
+  // The hiring platform the mail travelled through (iCIMS, Greenhouse). Metadata only.
+  via: text("via"),
   // When employer/role/round were extracted by the classifier. null on rows stored before
   // that existed; scripts/link-history.mts re-extracts those before linking them.
   extractedAt: timestamp("extracted_at", { withTimezone: true }),
@@ -78,6 +84,8 @@ export const jobApplications = pgTable("job_applications", {
   // The real employer, never the ATS.
   employer: text("employer").notNull(),
   role: text("role"),
+  // The hiring platform of the first email that named one. Metadata, never the employer.
+  via: text("via"),
   // Applied | Screening | Assessment | Interview | Offer
   stage: text("stage").notNull().default("Applied"),
   interviewRound: integer("interview_round").notNull().default(0),

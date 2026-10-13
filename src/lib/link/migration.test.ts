@@ -40,7 +40,11 @@ describe("migrate-linking", () => {
     expect(kept).toHaveLength(1);
     expect(kept[0]).toMatchObject({ company: "Cotiviti", linkState: null, threadId: null });
 
-    const summary = await linkPendingEmails(db as never, { ownerEmail: null });
+    // A row stored before extraction existed has no employer yet; it must wait, not guess.
+    expect(await linkPendingEmails(db as never, { ownerEmail: null, requireExtracted: true })).toMatchObject({ processed: 0 });
+    await db.update(applications).set({ employer: "Cotiviti", extractedAt: new Date() });
+
+    const summary = await linkPendingEmails(db as never, { ownerEmail: null, requireExtracted: true });
     expect(summary.created).toBe(1);
     expect(await db.select().from(jobApplications)).toHaveLength(1);
   });

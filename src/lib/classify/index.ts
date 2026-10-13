@@ -72,6 +72,7 @@ export type Classification =
       evidence: string;
       // Facts extracted in the same call (no extra spend). See prompt.ts.
       employer: string | null;
+      via: string | null;
       role: string | null;
       round: number | null;
       model: string;
@@ -114,6 +115,7 @@ export async function classifyEmail(
     category: verdict.category,
     evidence: verdict.evidence,
     employer: verdict.employer,
+    via: verdict.via,
     role: verdict.role,
     round: verdict.round,
     model: response.model,

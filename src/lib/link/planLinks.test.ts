@@ -26,6 +26,7 @@ const tracked = (over: Partial<TrackedApplication> = {}): TrackedApplication => 
   appliedAt: day(0),
   firstSeenAt: day(0),
   threadIds: [],
+  via: null,
   round: 0,
   flags: [],
   lastActivityAt: day(0),
@@ -142,5 +143,19 @@ describe("planLinks: what changed", () => {
     const target = tracked({ id: 2, threadIds: ["t2"] });
     const plan = planLinks([email({ threadId: "t2", kind: "assessment", role: null })], [untouched, target]);
     expect([...plan.touched]).toEqual([2]);
+  });
+});
+
+describe("planLinks: via (the hiring platform the mail travelled through)", () => {
+  test("a new application records the platform of the email that created it", () => {
+    const plan = planLinks([email({ via: "iCIMS" })], []);
+    expect(plan.apps[0].via).toBe("iCIMS");
+  });
+
+  test("a later email fills a missing platform but never overwrites a known one", () => {
+    const filled = planLinks([email({ kind: "interview", role: null, via: "Greenhouse", receivedAt: day(2) })], [tracked({ via: null })]);
+    expect(filled.apps[0].via).toBe("Greenhouse");
+    const kept = planLinks([email({ kind: "interview", role: null, via: "Greenhouse", receivedAt: day(2) })], [tracked({ via: "iCIMS" })]);
+    expect(kept.apps[0].via).toBe("iCIMS");
   });
 });

@@ -23,11 +23,15 @@ beforeEach(async () => {
 let n = 0;
 async function addEmail(over: Partial<typeof applications.$inferInsert> = {}) {
   n++;
+  // `employer` is what the classifier read from the email; `company` is only the display
+  // name. They agree unless a test says otherwise.
+  const company = over.company ?? "Cotiviti";
   const [row] = await db
     .insert(applications)
     .values({
       gmailMessageId: `m${n}`,
-      company: "Cotiviti",
+      company,
+      employer: company,
       role: "Data Scientist I",
       category: "Applied",
       receivedAt: new Date(Date.UTC(2026, 8, 1, 12, n)),
@@ -38,6 +42,23 @@ async function addEmail(over: Partial<typeof applications.$inferInsert> = {}) {
 }
 
 describe("linkPendingEmails", () => {
+  test("an email with no extracted employer waits in Review, even though its display company is filled in", async () => {
+    // The sender-name fallback fills `company` ("Gmail", a recruiter's name). It must never
+    // be mistaken for the employer.
+    const e = await addEmail({ company: "Gmail", employer: null, category: "Interview" });
+    const summary = await linkPendingEmails(db as never, { ownerEmail: null });
+    expect(summary).toMatchObject({ created: 0, review: 1 });
+    expect(await db.select().from(jobApplications)).toHaveLength(0);
+    const [item] = await db.select().from(reviewItems);
+    expect(item).toMatchObject({ emailId: e.id, evidence: "employer could not be resolved" });
+  });
+
+  test("the hiring platform is stored on the application", async () => {
+    await addEmail({ via: "iCIMS" });
+    await linkPendingEmails(db as never, { ownerEmail: null });
+    expect((await db.select().from(jobApplications))[0]).toMatchObject({ employer: "Cotiviti", via: "iCIMS" });
+  });
+
   test("creates an application for an Applied email and links the email to it", async () => {
     const e = await addEmail({ threadId: "t1" });
     const summary = await linkPendingEmails(db as never, { ownerEmail: "me@example.com" });

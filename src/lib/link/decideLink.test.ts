@@ -277,6 +277,21 @@ describe("decideLink: rejections never close the wrong thing (scenarios 26, 27, 
     expect(decideLink(reject({ role: "Quantum Engineer" }), [app()]).action).toBe("ask");
   });
 
+  test("a rejection whose role matches only loosely asks, because attaching it would close the application", () => {
+    const apps = [app({ role: "Software Engineer", stage: "Interview" })];
+    expect(decideLink(reject({ role: "Senior Software Engineer" }), apps).action).toBe("ask");
+  });
+
+  test("a rejection naming an extra team qualifier on one side asks instead of closing", () => {
+    const apps = [app({ role: "Software Engineer Intern", stage: "Interview" })];
+    expect(decideLink(reject({ role: "Software Engineer Intern - Security" }), apps).action).toBe("ask");
+  });
+
+  test("a loose match for any other kind still attaches, flagged", () => {
+    const apps = [app({ role: "Software Engineer" })];
+    expect(decideLink(mail({ kind: "interview", role: "Senior Software Engineer" }), apps)).toMatchObject({ action: "attach", flagged: true });
+  });
+
   test("mail in a rejected thread reopens it, flagged", () => {
     const decision = decideLink(mail({ threadId: "t1", kind: "interview" }), [app({ threadIds: ["t1"], rejected: true })]);
     expect(decision).toMatchObject({ action: "attach", reopen: true, flagged: true });

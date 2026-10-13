@@ -66,7 +66,11 @@ async function reextract(): Promise<{ done: number; stoppedEarly: boolean }> {
       });
       const set: Partial<typeof applications.$inferInsert> = { extractedAt: new Date() };
       if (result.decision === "store") {
-        if (result.employer) set.company = result.employer;
+        if (result.employer) {
+          set.employer = result.employer;
+          set.company = result.employer;
+        }
+        if (result.via) set.via = result.via;
         if (result.role) set.role = result.role;
         if (result.round) set.interviewRound = result.round;
       }
@@ -90,7 +94,7 @@ async function reextract(): Promise<{ done: number; stoppedEarly: boolean }> {
 async function link() {
   const total = { processed: 0, created: 0, attached: 0, review: 0, ignored: 0 };
   for (;;) {
-    const s = await linkPendingEmails(db, { ownerEmail: process.env.OWNER_EMAIL ?? null, since, limit: 200 });
+    const s = await linkPendingEmails(db, { ownerEmail: process.env.OWNER_EMAIL ?? null, since, limit: 200, requireExtracted: true });
     if (s.processed === 0) break;
     for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += s[k];
     log(`  linked ${total.processed} so far`);

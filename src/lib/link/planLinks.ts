@@ -8,6 +8,7 @@ import type { ApplicationState, Candidate, EmailFacts, OpenApplication } from ".
 
 export type TrackedApplication = Omit<OpenApplication, "threadIds"> & {
   threadIds: string[];
+  via: string | null;
   round: number;
   flags: string[];
   lastActivityAt: Date;
@@ -79,6 +80,7 @@ export function planLinks(emails: readonly LinkableEmail[], existing: readonly T
         appliedAt: email.kind === "applied" ? email.receivedAt : null,
         firstSeenAt: email.receivedAt,
         threadIds: email.threadId ? [email.threadId] : [],
+        via: email.via,
         round: state.round,
         flags: state.flags,
         lastActivityAt: email.receivedAt,
@@ -101,6 +103,7 @@ export function planLinks(emails: readonly LinkableEmail[], existing: readonly T
     }
     if (email.threadId && !app.threadIds.includes(email.threadId)) app.threadIds.push(email.threadId);
     if (!app.role && email.role) app.role = email.role;
+    if (!app.via && email.via) app.via = email.via;
     app.firstSeenAt = earlier(app.firstSeenAt, email.receivedAt);
     app.lastActivityAt = later(app.lastActivityAt, email.receivedAt);
     touched.add(app.id);

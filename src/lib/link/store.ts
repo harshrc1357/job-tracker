@@ -92,6 +92,7 @@ export async function linkPendingEmails(
     appliedAt: a.appliedAt,
     firstSeenAt: a.firstSeenAt,
     threadIds: [...(threads.get(a.id) ?? [])],
+    via: a.via,
     round: a.interviewRound,
     flags: a.flags,
     lastActivityAt: a.lastActivityAt,
@@ -100,9 +101,10 @@ export async function linkPendingEmails(
   const emails: LinkableEmail[] = pending.map((r) => ({
     emailId: r.id,
     threadId: r.threadId,
-    employer: r.company,
+    // Only what the classifier read. `company` is a display name with a sender fallback.
+    employer: r.employer,
     role: r.role,
-    via: null,
+    via: r.via,
     kind: isCategory(r.category) ? KIND_BY_CATEGORY[r.category] : "marketing",
     fromMe: owner !== null && addressOf(r.fromEmail) === owner,
     receivedAt: r.receivedAt,
@@ -120,6 +122,7 @@ export async function linkPendingEmails(
         .values({
           employer: app.employer,
           role: app.role,
+          via: app.via,
           stage: app.stage,
           interviewRound: app.round,
           status: app.rejected ? "rejected" : "open",
@@ -137,6 +140,7 @@ export async function linkPendingEmails(
         .update(jobApplications)
         .set({
           role: app.role,
+          via: app.via,
           stage: app.stage,
           interviewRound: app.round,
           status: app.rejected ? "rejected" : "open",

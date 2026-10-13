@@ -20,6 +20,7 @@ describe("parseVerdict", () => {
       category: "Assessment",
       evidence: "complete the HackerRank test",
       employer: null,
+      via: null,
       role: null,
       round: null,
     });
@@ -39,7 +40,7 @@ describe("parseVerdict", () => {
     const verdict = parseVerdict(raw, "test-model");
 
     // Assert
-    expect(verdict).toEqual({ isJob: true, category: "Offer", evidence: "pleased to offer", employer: null, role: null, round: null });
+    expect(verdict).toEqual({ isJob: true, category: "Offer", evidence: "pleased to offer", employer: null, via: null, role: null, round: null });
   });
 
   test("treats a missing isJob field as a skip rather than throwing", () => {
@@ -61,7 +62,7 @@ describe("parseVerdict", () => {
     const verdict = parseVerdict(raw, "test-model");
 
     // Assert
-    expect(verdict).toEqual({ isJob: true, category: "Applied", evidence: "", employer: null, role: null, round: null });
+    expect(verdict).toEqual({ isJob: true, category: "Applied", evidence: "", employer: null, via: null, role: null, round: null });
   });
 
   test("refuses to salvage when the truncated category is not one of ours", () => {
@@ -155,6 +156,21 @@ describe("parseVerdict: employer, role and round extraction", () => {
     expect(v).toMatchObject({ isJob: true, employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2 });
   });
 
+  test("reads the hiring platform as via and treats blanks as not stated", () => {
+    expect(parseVerdict(raw({ employer: "Cotiviti", via: "iCIMS" }), "m")).toMatchObject({ employer: "Cotiviti", via: "iCIMS" });
+    expect(parseVerdict(raw({ via: "N/A" }), "m")).toMatchObject({ via: null });
+    expect(parseVerdict(raw({}), "m")).toMatchObject({ via: null });
+  });
+
+  test("keeps via when max_tokens cuts the evidence short", () => {
+    const cut = '{"isJob": true, "category": "Interview", "employer": "Cotiviti", "via": "Greenhouse", "role": "Data Scientist I", "round": 1, "evidence": "Your inter';
+    expect(parseVerdict(cut, "m")).toMatchObject({ employer: "Cotiviti", via: "Greenhouse" });
+  });
+
+  test("the prompt asks for the hiring platform as via", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/"via"/);
+  });
+
   test.each([null, "", "null", "N/A", "unknown", "  "])("treats %j as no employer / role rather than a name", (value) => {
     const v = parseVerdict(raw({ employer: value, role: value }), "m");
     expect(v).toMatchObject({ isJob: true, employer: null, role: null });
@@ -167,7 +183,7 @@ describe("parseVerdict: employer, role and round extraction", () => {
   });
 
   test("missing fields from an older-style answer become null, not a throw", () => {
-    expect(parseVerdict(raw({}), "m")).toMatchObject({ employer: null, role: null, round: null });
+    expect(parseVerdict(raw({}), "m")).toMatchObject({ employer: null, via: null, role: null, round: null });
   });
 
   test("a round that is not a small positive integer becomes null", () => {

@@ -21,9 +21,10 @@ beforeEach(async () => {
 
 async function addEmail(over: Partial<typeof applications.$inferInsert> = {}) {
   n++;
+  const company = over.company ?? "Cotiviti";
   const [row] = await db
     .insert(applications)
-    .values({ gmailMessageId: `a${n}`, company: "Cotiviti", role: "Gen AI Intern", category: "Applied", receivedAt: new Date(Date.UTC(2026, 8, 1, 12, n)), ...over })
+    .values({ gmailMessageId: `a${n}`, company, employer: company, role: "Gen AI Intern", category: "Applied", receivedAt: new Date(Date.UTC(2026, 8, 1, 12, n)), ...over })
     .returning();
   return row;
 }

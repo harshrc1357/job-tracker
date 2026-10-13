@@ -128,10 +128,12 @@ export async function processMessage(
         classifierEvidence: classification.evidence,
         gmailMessageId: messageId,
         threadId: full.data.threadId ?? null,
-        // The employer the model read from the email. The sender-based guess is only a
-        // fallback: for ATS mail it names the ATS, which is exactly what must never
-        // become a card's company.
+        // `company` is the display name: the employer the model read, else a sender-based
+        // guess (for ATS mail that names the ATS). The Linker never reads it; it trusts
+        // only `employer`, which stays null when the model could not tell.
         company: classification.employer ?? extractCompany(from, subject),
+        employer: classification.employer,
+        via: classification.via,
         role: classification.role,
         interviewRound: classification.round,
         extractedAt: new Date(),
