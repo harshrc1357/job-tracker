@@ -33,9 +33,19 @@ export const STATEMENTS = [
      created_at timestamptz NOT NULL DEFAULT now(),
      resolved_at timestamptz
    )`,
+  `CREATE TABLE IF NOT EXISTS link_examples (
+     id serial PRIMARY KEY,
+     kind text NOT NULL,
+     email_id integer,
+     from_application_id integer,
+     to_application_id integer,
+     facts jsonb NOT NULL DEFAULT '{}',
+     created_at timestamptz NOT NULL DEFAULT now()
+   )`,
   // Same lockdown as every other table (see secure-database.mjs): Supabase exposes new
   // public tables over PostgREST by default. Row Level Security with no policies denies
   // the anon key everything; the app connects as the owner and bypasses it.
   `ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE review_items ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE link_examples ENABLE ROW LEVEL SECURITY`,
 ];

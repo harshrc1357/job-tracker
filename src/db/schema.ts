@@ -92,6 +92,21 @@ export const jobApplications = pgTable("job_applications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Every correction the owner makes (detach, split, merge, review answer, stage change),
+// kept as a labelled example of what the right link was. Nothing reads it yet; it is the
+// ground truth the linker's thresholds and prompts get measured against.
+export const linkExamples = pgTable("link_examples", {
+  id: serial("id").primaryKey(),
+  // detach | split | merge | review | stage
+  kind: text("kind").notNull(),
+  emailId: integer("email_id"),
+  fromApplicationId: integer("from_application_id"),
+  toApplicationId: integer("to_application_id"),
+  // What the linker saw at the time: employer, role, thread, confidence, evidence.
+  facts: jsonb("facts").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Emails the linker would not decide (confidence < 0.70), waiting for one tap.
 export const reviewItems = pgTable("review_items", {
   id: serial("id").primaryKey(),

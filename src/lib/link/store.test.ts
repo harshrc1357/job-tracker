@@ -85,6 +85,17 @@ describe("linkPendingEmails", () => {
     expect(await db.select().from(reviewItems)).toHaveLength(1);
   });
 
+  test("review candidates point at real application ids, even for applications created in the same run", async () => {
+    await addEmail({ role: "Data Scientist I" });
+    await addEmail({ role: "ML Engineer" });
+    await addEmail({ category: "Interview", role: null });
+    await linkPendingEmails(db as never, { ownerEmail: null });
+    const realIds = (await db.select().from(jobApplications)).map((a) => a.id).sort();
+    const [item] = await db.select().from(reviewItems);
+    const candidateIds = (item.candidates as { applicationId: number }[]).map((c) => c.applicationId).sort();
+    expect(candidateIds).toEqual(realIds);
+  });
+
   test("a roleless rejection with two open applications closes neither", async () => {
     await addEmail({ role: "Data Scientist I" });
     await addEmail({ role: "ML Engineer" });

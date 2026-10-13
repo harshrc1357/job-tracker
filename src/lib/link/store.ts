@@ -159,7 +159,14 @@ export async function linkPendingEmails(
       if (r.outcome === "review") {
         await tx
           .insert(reviewItems)
-          .values({ emailId: r.emailId, confidence: r.confidence, evidence: r.evidence, candidates: r.candidates })
+          .values({
+            emailId: r.emailId,
+            confidence: r.confidence,
+            evidence: r.evidence,
+            // Candidates may be applications created earlier in this same plan, still
+            // carrying temporary negative ids.
+            candidates: r.candidates.map((c) => ({ ...c, applicationId: c.applicationId < 0 ? realId.get(c.applicationId)! : c.applicationId })),
+          })
           .onConflictDoNothing({ target: reviewItems.emailId });
       }
       summary.processed++;
