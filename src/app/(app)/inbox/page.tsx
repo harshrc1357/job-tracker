@@ -1,9 +1,12 @@
 import { db, isDbConfigured } from "@/db/client";
-import { applications } from "@/db/schema";
+import { applications, jobApplications } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { CATEGORIES, isReminderCategory, type Category } from "@/lib/categories";
 import { MAX_REMINDERS_PER_APPLICATION, REMINDER_WINDOW_HOURS } from "@/lib/constants";
-import { ApplicationsPanel, type ApplicationListRow } from "./ApplicationsPanel";
+import { loadAppRows } from "@/lib/link/actions";
+import { TabNav } from "../TabNav";
+import { loadShellCounts } from "../shell";
+import { ApplicationsPanel, type ApplicationListRow } from "../../ApplicationsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +38,11 @@ const LIST_COLUMNS = {
   reminderDueAt: applications.reminderDueAt,
   reminderCount: applications.reminderCount,
   reminderSent: applications.reminderSent,
+  // Which application each email was attached to, so a wrong link is visible (and
+  // fixable from the application page) from the one list that shows every email.
+  jobApplicationId: applications.jobApplicationId,
+  linkState: applications.linkState,
+  linkFlagged: applications.linkFlagged,
 } as const;
 
 export default async function DashboardPage() {
@@ -43,11 +51,17 @@ export default async function DashboardPage() {
   }
 
   let all: Row[] = [];
+  const appLabels: Record<number, string> = {};
+  let shell: Awaited<ReturnType<typeof loadShellCounts>> = null;
   try {
     all = await db
       .select(LIST_COLUMNS)
       .from(applications)
       .orderBy(desc(applications.receivedAt));
+    for (const a of await db.select().from(jobApplications)) {
+      appLabels[a.id] = a.role ? `${a.employer} · ${a.role}` : `${a.employer} · role unknown`;
+    }
+    shell = await loadShellCounts(db, await loadAppRows(db));
   } catch (err) {
     return <SetupNotice reason="Couldn't reach the database. Check DATABASE_URL." detail={String(err)} />;
   }
@@ -76,34 +90,8 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <header>
-        <div className="title-block">
-          <h1>Job Tracker</h1>
-          <p>Auto-sorted from Gmail · {all.length} tracked</p>
-        </div>
-        <div className="status-row">
-          <div className="status-pill">
-            <span className="dot" /> Gmail connected
-          </div>
-          <div className="status-pill">
-            <span className="dot" style={{ background: "var(--coral)" }} /> Telegram reminders on
-          </div>
-          <a
-            href="/api/auth/logout"
-            style={{
-              fontSize: 13,
-              color: "var(--ink-soft)",
-              border: "1px solid var(--border)",
-              borderRadius: 999,
-              padding: "6px 14px",
-              textDecoration: "none",
-            }}
-          >
-            Log out
-          </a>
-        </div>
-      </header>
 
+      <TabNav counts={shell} />
       <div className="stats">
         <div className="stat-card applied">
           <div className="num">{counts.Applied}</div>
@@ -141,7 +129,7 @@ export default async function DashboardPage() {
             <div className="empty-state">No emails synced yet — /api/sync hasn't run, or nothing matched.</div>
           </div>
         ) : (
-          <ApplicationsPanel applications={all} />
+          <ApplicationsPanel applications={all} appLabels={appLabels} />
         )}
 
         <div className="panel side-card">

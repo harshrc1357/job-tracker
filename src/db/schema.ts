@@ -5,6 +5,8 @@ import {
   timestamp,
   boolean,
   integer,
+  real,
+  jsonb,
   unique,
 } from "drizzle-orm/pg-core";
 
@@ -12,6 +14,10 @@ import {
 export const applications = pgTable("applications", {
   id: serial("id").primaryKey(),
   gmailMessageId: text("gmail_message_id").notNull().unique(),
+  // Gmail thread id. ATS systems reply in-thread, so a thread already linked to an
+  // application is the strongest evidence for linking the next email (see src/lib/link).
+  // Nullable: rows stored before this column existed are filled by scripts/backfill-thread-id.mts.
+  threadId: text("thread_id"),
   company: text("company").notNull(),
   role: text("role"),
   // Applied | Assessment | Interview | Offer | Rejection | Reminder | Verification
@@ -43,10 +49,82 @@ export const applications = pgTable("applications", {
   // knowing which model answered and what text it pointed at.
   classifiedBy: text("classified_by"),
   classifierEvidence: text("classifier_evidence"),
+  // How this email was linked to an Application, a row of job_applications (see src/lib/link and GLOSSARY.md).
+  // null link_state = not processed yet; that is what makes linking idempotent.
+  //   linked  attached to job_application_id
+  //   review  the linker would not decide; a row in review_items waits for the owner
+  //   ignored never part of an application (verification, own reply with no match)
+  linkState: text("link_state"),
+  jobApplicationId: integer("job_application_id"),
+  linkConfidence: real("link_confidence"),
+  linkEvidence: text("link_evidence"),
+  linkFlagged: boolean("link_flagged").notNull().default(false),
+  // Interview round when the email stated one (extracted by the classifier).
+  interviewRound: integer("interview_round"),
+  // What the classifier read as the real employer. `company` below stays the display name
+  // (it falls back to a sender-based guess); the Linker trusts only this column, so a
+  // sender name can never become an Employer. null = not extracted or not stated.
+  employer: text("employer"),
+  // The hiring platform the mail travelled through (iCIMS, Greenhouse). Metadata only.
+  via: text("via"),
+  // When employer/role/round were extracted by the classifier. null on rows stored before
+  // that existed; scripts/link-history.mts re-extracts those before linking them.
+  extractedAt: timestamp("extracted_at", { withTimezone: true }),
   reminderCount: integer("reminder_count").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
   reminderSent: boolean("reminder_sent").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One row per attempt at one Role at one Employer (GLOSSARY.md: Application). The
+// legacy table above is misnamed: it stores Emails, and each points here through
+// job_application_id. Renaming it is a wide refactor, deliberately left for later.
+export const jobApplications = pgTable("job_applications", {
+  id: serial("id").primaryKey(),
+  // The real employer, never the ATS.
+  employer: text("employer").notNull(),
+  role: text("role"),
+  // The hiring platform of the first email that named one. Metadata, never the employer.
+  via: text("via"),
+  // Applied | Screening | Assessment | Interview | Offer
+  stage: text("stage").notNull().default("Applied"),
+  interviewRound: integer("interview_round").notNull().default(0),
+  // open | rejected. Rejected keeps the stage it reached.
+  status: text("status").notNull().default("open"),
+  // e.g. reopened, offer-rescinded
+  flags: text("flags").array().notNull().default([]),
+  // null when we only ever saw later-stage mail (Applied email never arrived).
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Every correction the owner makes (detach, split, merge, review answer, stage change),
+// kept as a labelled example of what the right link was. Nothing reads it yet; it is the
+// ground truth the linker's thresholds and prompts get measured against.
+export const linkExamples = pgTable("link_examples", {
+  id: serial("id").primaryKey(),
+  // detach | split | merge | review | stage
+  kind: text("kind").notNull(),
+  emailId: integer("email_id"),
+  fromApplicationId: integer("from_application_id"),
+  toApplicationId: integer("to_application_id"),
+  // What the linker saw at the time: employer, role, thread, confidence, evidence.
+  facts: jsonb("facts").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Emails the linker would not decide (confidence < 0.70), waiting for one tap.
+export const reviewItems = pgTable("review_items", {
+  id: serial("id").primaryKey(),
+  emailId: integer("email_id").notNull().unique(),
+  confidence: real("confidence").notNull(),
+  evidence: text("evidence").notNull(),
+  // [{ applicationId, score }]
+  candidates: jsonb("candidates").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
 // Message ids the classifier has already judged to be not job-related.

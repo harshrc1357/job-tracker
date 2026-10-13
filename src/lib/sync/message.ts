@@ -127,7 +127,16 @@ export async function processMessage(
         classifiedBy: classification.model,
         classifierEvidence: classification.evidence,
         gmailMessageId: messageId,
-        company: extractCompany(from, subject),
+        threadId: full.data.threadId ?? null,
+        // `company` is the display name: the employer the model read, else a sender-based
+        // guess (for ATS mail that names the ATS). The Linker never reads it; it trusts
+        // only `employer`, which stays null when the model could not tell.
+        company: classification.employer ?? extractCompany(from, subject),
+        employer: classification.employer,
+        via: classification.via,
+        role: classification.role,
+        interviewRound: classification.round,
+        extractedAt: new Date(),
         category,
         subject,
         snippet,

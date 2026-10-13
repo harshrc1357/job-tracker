@@ -5,7 +5,7 @@
 // revert would multiply the per-run Gmail fetches and LLM spend indefinitely, which is
 // exactly the kind of cost increase that hides until the bill arrives.
 
-export const DEFAULT_LOOKBACK_DAYS = 14;
+export const DEFAULT_LOOKBACK_DAYS = 60;
 export const MAX_LOOKBACK_DAYS = 365;
 
 export function lookbackDays(fallback: number = DEFAULT_LOOKBACK_DAYS): number {

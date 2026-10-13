@@ -8,7 +8,7 @@ import { CATEGORIES, CATEGORY_BADGE_CLASS, type Category } from "@/lib/categorie
 // body is fetched one message at a time from /api/applications/[id] on click, because
 // shipping all of it up front was 87% of the page payload (see LIST_COLUMNS in
 // page.tsx).
-export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
+export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "threadId" | "interviewRound" | "extractedAt" | "employer" | "via" | "linkConfidence" | "linkEvidence" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
 
 type Row = ApplicationListRow;
 type Tab = "All" | Category;
@@ -62,6 +62,28 @@ function formatFullDate(date: Date): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+// Where this email was filed. Stops propagation so following the link does not also
+// select the row.
+function LinkChip({ row, label }: { row: Row; label?: string }) {
+  const stop = (event: React.MouseEvent) => event.stopPropagation();
+  if (row.linkState === "linked" && row.jobApplicationId && label) {
+    return (
+      <a className={`link-chip ${row.linkFlagged ? "flagged" : ""}`} href={`/applications/${row.jobApplicationId}`} onClick={stop}>
+        → {label}
+        {row.linkFlagged ? " · check" : ""}
+      </a>
+    );
+  }
+  if (row.linkState === "review") {
+    return (
+      <a className="link-chip pending" href="/review" onClick={stop}>
+        → in review queue
+      </a>
+    );
+  }
+  return null;
 }
 
 // Wraps the sanitized email HTML in a minimal document so it renders isolated
@@ -140,7 +162,14 @@ function useEmailHtml(id: number | null): { html: string | null | undefined; fai
 // any inbox. Filtering by category and picking an email are both client-side state
 // over data the server component already fetched, so this is the one interactive
 // piece of the dashboard and everything else stays a plain server component.
-export function ApplicationsPanel({ applications: rows }: { applications: Row[] }) {
+export function ApplicationsPanel({
+  applications: rows,
+  appLabels = {},
+}: {
+  applications: Row[];
+  // Application id (job_applications.id, not an email's) -> "Employer · Role", for the link under each email.
+  appLabels?: Record<number, string>;
+}) {
   const [activeTab, setActiveTab] = useState<Tab>("All");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -246,6 +275,7 @@ export function ApplicationsPanel({ applications: rows }: { applications: Row[] 
                 </div>
                 <div className="role">{row.role ?? row.subject}</div>
                 <div className="snippet">{row.snippet}</div>
+                <LinkChip row={row} label={row.jobApplicationId ? appLabels[row.jobApplicationId] : undefined} />
               </div>
             </div>
           ))}

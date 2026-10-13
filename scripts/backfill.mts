@@ -112,10 +112,9 @@ function withTimeout<T>(work: Promise<T>, label: string): Promise<T> {
   ]);
 }
 
-// The window a bare `npm run backfill` covers. 30 days reaches back past the
-// oldest row the previous database ever held, so it reconstructs the full history
-// rather than a slice of it.
-const DEFAULT_BACKFILL_DAYS = 30;
+// The window a bare `npm run backfill` covers. Matches the live sync's default
+// lookback (src/lib/sync/lookback.ts): the product only tracks the last 60 days.
+const DEFAULT_BACKFILL_DAYS = 60;
 
 type Args = { days: number; isDryRun: boolean };
 

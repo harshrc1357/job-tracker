@@ -12,6 +12,11 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "backfill": "tsx --env-file=.env scripts/backfill.mts",
+    "backfill:threads": "tsx --env-file=.env scripts/backfill-thread-id.mts",
+    "migrate:linking": "node --env-file=.env scripts/migrate-linking.mjs",
+    "eval:extraction": "tsx --env-file=.env scripts/eval-extraction.mts",
+    "link:history": "tsx --env-file=.env scripts/link-history.mts",
+    "preview:db": "tsx scripts/preview-db.mts",
     "backfill:bg": "scripts\backfill.cmd",
     "db:secure": "node scripts/secure-database.mjs",
     "db:secure:check": "node scripts/secure-database.mjs --check"
@@ -28,6 +33,8 @@
     "sanitize-html": "^2.17.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
+    "@electric-sql/pglite-socket": "^0.2.12",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

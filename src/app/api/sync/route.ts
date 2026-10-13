@@ -23,12 +23,16 @@ import {
   type MessageOutcome,
 } from "@/lib/sync/message";
 import { lookbackDays } from "@/lib/sync/lookback";
+import { linkPendingEmails } from "@/lib/link/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 
 const MAX_LISTED_MESSAGES = 500;
+
+// Emails linked to applications per sync run. Small on purpose; see the linking block.
+const LINK_BATCH_PER_RUN = 10;
 
 // How many individual errors get quoted in the Telegram alert before it truncates.
 const MAX_ALERT_ERRORS = 5;
@@ -52,6 +56,9 @@ type SyncResult = {
   ranOutOfTime: boolean;
   hitLlmBudget: boolean;
   wasRateLimited: boolean;
+  // Emails linked to Applications this run, and how many the linker would not decide.
+  linked: number;
+  needsReview: number;
   errors: string[];
 };
 
@@ -126,6 +133,8 @@ export async function GET(req: NextRequest) {
     ranOutOfTime: false,
     hitLlmBudget: false,
     wasRateLimited: false,
+    linked: 0,
+    needsReview: 0,
     errors: [],
   };
 
@@ -190,7 +199,7 @@ export async function GET(req: NextRequest) {
     result.listed = messages.length;
 
     // One query for every id we already hold, instead of a SELECT per message. At a
-    // 14-day window that was 100+ sequential database round trips per run before any
+    // 60-day window that is 100+ sequential database round trips per run before any
     // real work started, and it is most of why every run was hitting the 60s wall.
     //
     // Sequential, NOT Promise.all. Supabase's transaction-mode pooler assigns a
@@ -304,6 +313,27 @@ export async function GET(req: NextRequest) {
     // done when it is either stored or recorded as ignored — anything else (errored,
     // deferred, cut off by the clock) comes back on the next run.
     result.remaining = Math.max(fresh.length - result.inserted - result.ignored, 0);
+
+    // Link recently stored mail, a few per run. Every email costs a handful of round trips
+    // on the pooled connection, so a burst after an outage must not turn one run into a
+    // timeout: the cap bounds it and the rest stays pending for the next tick (link_state
+    // is still null). requireExtracted keeps older history, whose employer is a
+    // sender-based guess, out of this path; scripts/link-history.mts links that after
+    // re-extracting it. A linking failure never fails the sync: the emails are already
+    // stored and simply stay unlinked until the next run.
+    if (hasTimeLeft()) {
+      try {
+        const linked = await linkPendingEmails(db, {
+          ownerEmail: process.env.OWNER_EMAIL ?? null,
+          requireExtracted: true,
+          limit: LINK_BATCH_PER_RUN,
+        });
+        result.linked = linked.created + linked.attached;
+        result.needsReview = linked.review;
+      } catch (err) {
+        result.errors.push(`link: ${describe(err)}`);
+      }
+    }
 
     await runReminderPass(result, hasTimeLeft);
   } catch (err) {

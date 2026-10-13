@@ -19,6 +19,10 @@ describe("parseVerdict", () => {
       isJob: true,
       category: "Assessment",
       evidence: "complete the HackerRank test",
+      employer: null,
+      via: null,
+      role: null,
+      round: null,
     });
   });
 
@@ -36,7 +40,7 @@ describe("parseVerdict", () => {
     const verdict = parseVerdict(raw, "test-model");
 
     // Assert
-    expect(verdict).toEqual({ isJob: true, category: "Offer", evidence: "pleased to offer" });
+    expect(verdict).toEqual({ isJob: true, category: "Offer", evidence: "pleased to offer", employer: null, via: null, role: null, round: null });
   });
 
   test("treats a missing isJob field as a skip rather than throwing", () => {
@@ -58,7 +62,7 @@ describe("parseVerdict", () => {
     const verdict = parseVerdict(raw, "test-model");
 
     // Assert
-    expect(verdict).toEqual({ isJob: true, category: "Applied", evidence: "" });
+    expect(verdict).toEqual({ isJob: true, category: "Applied", evidence: "", employer: null, via: null, role: null, round: null });
   });
 
   test("refuses to salvage when the truncated category is not one of ours", () => {
@@ -140,5 +144,87 @@ describe("CLASSIFIER_SYSTEM_PROMPT", () => {
     expect(CLASSIFIER_SYSTEM_PROMPT).toContain(
       "Verification > Rejection > Offer > Interview > Assessment > Reminder > Applied"
     );
+  });
+});
+
+describe("parseVerdict: employer, role and round extraction", () => {
+  const raw = (extra: Record<string, unknown>) =>
+    JSON.stringify({ isJob: true, category: "Interview", evidence: "round 2", ...extra });
+
+  test("reads employer, role and round", () => {
+    const v = parseVerdict(raw({ employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2 }), "m");
+    expect(v).toMatchObject({ isJob: true, employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2 });
+  });
+
+  test("reads the hiring platform as via and treats blanks as not stated", () => {
+    expect(parseVerdict(raw({ employer: "Cotiviti", via: "iCIMS" }), "m")).toMatchObject({ employer: "Cotiviti", via: "iCIMS" });
+    expect(parseVerdict(raw({ via: "N/A" }), "m")).toMatchObject({ via: null });
+    expect(parseVerdict(raw({}), "m")).toMatchObject({ via: null });
+  });
+
+  test("keeps via when max_tokens cuts the evidence short", () => {
+    const cut = '{"isJob": true, "category": "Interview", "employer": "Cotiviti", "via": "Greenhouse", "role": "Data Scientist I", "round": 1, "evidence": "Your inter';
+    expect(parseVerdict(cut, "m")).toMatchObject({ employer: "Cotiviti", via: "Greenhouse" });
+  });
+
+  test("the prompt asks for the hiring platform as via", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/"via"/);
+  });
+
+  test.each([null, "", "null", "N/A", "unknown", "  "])("treats %j as no employer / role rather than a name", (value) => {
+    const v = parseVerdict(raw({ employer: value, role: value }), "m");
+    expect(v).toMatchObject({ isJob: true, employer: null, role: null });
+  });
+
+  test("an ATS name returned as the employer is discarded, never trusted", () => {
+    for (const ats of ["iCIMS", "Greenhouse", "LinkedIn", "Workday", "Hiring Team"]) {
+      expect(parseVerdict(raw({ employer: ats }), "m")).toMatchObject({ employer: null });
+    }
+  });
+
+  test("missing fields from an older-style answer become null, not a throw", () => {
+    expect(parseVerdict(raw({}), "m")).toMatchObject({ employer: null, via: null, role: null, round: null });
+  });
+
+  test("a round that is not a small positive integer becomes null", () => {
+    for (const round of [0, -1, 2.5, "two", 99, null]) {
+      expect(parseVerdict(raw({ round }), "m")).toMatchObject({ round: null });
+    }
+  });
+
+  test("keeps employer and role when max_tokens cuts the evidence short", () => {
+    const cut = '{"isJob": true, "category": "Interview", "employer": "Cotiviti", "role": "Data Scientist I", "round": 1, "evidence": "Your inter';
+    expect(parseVerdict(cut, "m")).toMatchObject({ category: "Interview", employer: "Cotiviti", role: "Data Scientist I", round: 1 });
+  });
+
+  test("caps absurdly long role strings", () => {
+    const v = parseVerdict(raw({ role: "x".repeat(900) }), "m");
+    if (!v.isJob) throw new Error("expected job verdict");
+    expect(v.role!.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("CLASSIFIER_SYSTEM_PROMPT: extraction rules", () => {
+  test("defines the employer as the real company, never the ATS or recruiter's domain", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/real employer/i);
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/never[\s\S]*(iCIMS|ATS)/i);
+  });
+
+  test("tells the model to answer null rather than guess an employer or role", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/null/);
+  });
+
+  test("keeps the term or cohort in the role (Spring 2027)", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/Spring 2027/);
+  });
+
+  test("tells the model to ignore forwarded blocks and mail written to someone else (scenarios 19, 40)", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/Forwarded message/i);
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/written to someone else/i);
+  });
+
+  test("asks for employer and role before evidence, so a truncated answer keeps them", () => {
+    const at = (s: string) => CLASSIFIER_SYSTEM_PROMPT.lastIndexOf(s);
+    expect(at('"employer"')).toBeLessThan(at('"evidence"'));
   });
 });

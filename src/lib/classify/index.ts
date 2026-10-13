@@ -70,6 +70,11 @@ export type Classification =
       // The words from the email that decided it. Cheap to log, and the fastest way
       // to tell a prompt regression from a genuinely ambiguous email.
       evidence: string;
+      // Facts extracted in the same call (no extra spend). See prompt.ts.
+      employer: string | null;
+      via: string | null;
+      role: string | null;
+      round: number | null;
       model: string;
       usedFallback: boolean;
     };
@@ -109,6 +114,10 @@ export async function classifyEmail(
     decision: "store",
     category: verdict.category,
     evidence: verdict.evidence,
+    employer: verdict.employer,
+    via: verdict.via,
+    role: verdict.role,
+    round: verdict.round,
     model: response.model,
     usedFallback: response.usedFallback,
   };

@@ -33,8 +33,8 @@ const MAX_REQUESTS_PER_MINUTE = 360;
 
 // The per-day ceiling is a COST control, not a provider limit, so it is the one
 // number here that legitimately differs between callers. The always-on cron wants it
-// tight: a runaway loop against a 14-day window should cost cents, and 1,000 is
-// already ~2x the worst day this inbox has produced. A one-off backfill over a 45-day
+// tight: a runaway loop against a 60-day window should cost cents, and 1,000 is
+// already ~2x the worst day this inbox has produced. A one-off backfill over a 60-day
 // window wants it loose, because the whole job is ~1,700 calls and a tight cap just
 // splits it across three days for no benefit.
 //
