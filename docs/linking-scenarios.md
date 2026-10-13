@@ -57,3 +57,10 @@ Every scenario below becomes a test against the Linker (and Stage rules) before 
 42. Re-running sync on the same window → no duplicate Emails, Applications or Review items.
 43. Sync interrupted mid-run → resumable; partially linked state is never visible as a wrong merge.
 44. Override (split/merge/detach) → later Emails in that Thread follow the corrected Application; the override is stored as a labelled example.
+
+## Where each scenario is tested
+- Linker (`src/lib/link/decideLink.test.ts`): 1-11, 13-18, 20-21, 24, 26-29, 31-34, 37, 39. Scenario 12 (req ids) is exercised through role matching.
+- Stage rules (`src/lib/link/nextState.test.ts`): 22-25, 30.
+- Own replies and ignored mail (`decideLink.test.ts`): 35, 36, 38.
+- Classifier extraction (T4): 19 (forwarded blocks), 40 (mail not addressed to the owner), and employer extraction for 13-15.
+- Sync integration (T5): 41-43. Overrides (T7): 44.
