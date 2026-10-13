@@ -131,6 +131,13 @@ describe("linkPendingEmails", () => {
     expect(apps.map((a) => a.employer)).toEqual(["New Co"]);
   });
 
+  test("can be limited to mail received since a date, so history outside the window stays unlinked", async () => {
+    await addEmail({ company: "Ancient Co", receivedAt: new Date("2026-01-01T00:00:00Z") });
+    await addEmail({ company: "Recent Co", receivedAt: new Date("2026-09-20T00:00:00Z") });
+    await linkPendingEmails(db as never, { ownerEmail: null, since: new Date("2026-08-01T00:00:00Z") });
+    expect((await db.select().from(jobApplications)).map((a) => a.employer)).toEqual(["Recent Co"]);
+  });
+
   test("respects the batch limit and leaves the rest for the next run", async () => {
     for (let i = 0; i < 5; i++) await addEmail({ company: `C${i}` });
     const first = await linkPendingEmails(db as never, { ownerEmail: null, limit: 3 });

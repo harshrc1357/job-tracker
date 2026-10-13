@@ -15,6 +15,7 @@
     "backfill:threads": "tsx --env-file=.env scripts/backfill-thread-id.mts",
     "migrate:linking": "node --env-file=.env scripts/migrate-linking.mjs",
     "eval:extraction": "tsx --env-file=.env scripts/eval-extraction.mts",
+    "link:history": "tsx --env-file=.env scripts/link-history.mts",
     "backfill:bg": "scripts\backfill.cmd",
     "db:secure": "node scripts/secure-database.mjs",
     "db:secure:check": "node scripts/secure-database.mjs --check"

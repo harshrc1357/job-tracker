@@ -5,7 +5,7 @@
 // Idempotency lives in emails.link_state: only rows where it is null are processed, and
 // every processed row leaves with a non-null state. Running it twice is a no-op.
 
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
 import { isCategory, type Category } from "@/lib/categories";
@@ -44,6 +44,8 @@ export async function linkPendingEmails(
     // Restrict to these Gmail message ids. The live sync passes the emails it just stored,
     // so unlinked history is never swept up by it; the history script passes none.
     messageIds?: readonly string[];
+    // Only mail received at or after this. The history script passes now-60d.
+    since?: Date;
   },
 ): Promise<LinkSummary> {
   const summary: LinkSummary = { processed: 0, created: 0, attached: 0, review: 0, ignored: 0 };
@@ -55,9 +57,11 @@ export async function linkPendingEmails(
     .select()
     .from(applications)
     .where(
-      opts.messageIds
-        ? and(isNull(applications.linkState), inArray(applications.gmailMessageId, [...opts.messageIds]))
-        : isNull(applications.linkState),
+      and(
+        isNull(applications.linkState),
+        opts.messageIds ? inArray(applications.gmailMessageId, [...opts.messageIds]) : undefined,
+        opts.since ? gte(applications.receivedAt, opts.since) : undefined,
+      ),
     )
     .orderBy(asc(applications.receivedAt), asc(applications.id))
     .limit(opts.limit ?? DEFAULT_LIMIT);
