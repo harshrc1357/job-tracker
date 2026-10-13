@@ -72,7 +72,7 @@ export default async function DashboardPage() {
   }
 
   // "Upcoming" means due within the reminder window (see REMINDER_WINDOW_HOURS) and
-  // in a category the bot actually nudges about (Interview, Assessment, Offer) —
+  // in a category the bot actually nudges about (Screening, Interview, Assessment, Offer) —
   // mirrors the sync cron's own second pass exactly, so the dashboard never shows
   // something as upcoming that the bot wouldn't also be about to ping about.
   const now = Date.now();
@@ -96,6 +96,10 @@ export default async function DashboardPage() {
         <div className="stat-card applied">
           <div className="num">{counts.Applied}</div>
           <div className="label">Applied</div>
+        </div>
+        <div className="stat-card screening">
+          <div className="num">{counts.Screening}</div>
+          <div className="label">Screening</div>
         </div>
         <div className="stat-card assessment">
           <div className="num">{counts.Assessment}</div>

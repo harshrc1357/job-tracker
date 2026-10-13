@@ -8,25 +8,15 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
-import { isCategory, type Category } from "@/lib/categories";
+import { isCategory } from "@/lib/categories";
 import { planLinks, type LinkableEmail, type TrackedApplication } from "./planLinks";
-import { STAGES, type EmailKind, type Stage } from "./types";
+import { KIND_BY_CATEGORY, STAGES, type Stage } from "./types";
 
 // Any drizzle Postgres database: postgres-js in production, PGlite in tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = PgDatabase<any, any>;
 
 export type LinkSummary = { processed: number; created: number; attached: number; review: number; ignored: number };
-
-const KIND_BY_CATEGORY: Record<Category, EmailKind> = {
-  Applied: "applied",
-  Assessment: "assessment",
-  Interview: "interview",
-  Offer: "offer",
-  Rejection: "rejection",
-  Reminder: "reminder",
-  Verification: "verification",
-};
 
 const DEFAULT_LIMIT = 500;
 

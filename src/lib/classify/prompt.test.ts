@@ -85,11 +85,19 @@ describe("parseVerdict", () => {
   });
 
   test("throws when isJob is true but the category is not one of ours", () => {
-    // Arrange: a hallucinated category ("Screening") must not be written to a column
+    // Arrange: a hallucinated category ("Networking") must not be written to a column
     // the dashboard filters on.
     expect(() =>
-      parseVerdict('{"isJob": true, "category": "Screening", "evidence": "x"}', "test-model")
+      parseVerdict('{"isJob": true, "category": "Networking", "evidence": "x"}', "test-model")
     ).toThrow(/unknown category/);
+  });
+
+  test("reads a Screening verdict, whole or cut off by max_tokens", () => {
+    const whole = '{"isJob": true, "category": "Screening", "employer": "Cotiviti", "role": "Data Scientist I", "evidence": "quick intro call"}';
+    expect(parseVerdict(whole, "m")).toMatchObject({ isJob: true, category: "Screening", employer: "Cotiviti" });
+
+    const cut = '{"isJob": true, "category": "Screening", "employer": "Cotiviti", "evidence": "quick in';
+    expect(parseVerdict(cut, "m")).toMatchObject({ category: "Screening", employer: "Cotiviti" });
   });
 
   test("marks parse failures as unusable, so complete() falls back instead of banking", () => {
@@ -142,8 +150,35 @@ describe("CLASSIFIER_SYSTEM_PROMPT", () => {
 
   test("states the stage priority that makes an acknowledgement-plus-test an Assessment", () => {
     expect(CLASSIFIER_SYSTEM_PROMPT).toContain(
-      "Verification > Rejection > Offer > Interview > Assessment > Reminder > Applied"
+      "Verification > Rejection > Offer > Interview > Assessment > Screening > Reminder > Applied"
     );
+  });
+});
+
+// Screening sits between Applied and the technical stages, so the line between it and
+// Interview has to be drawn in words: both used to be "Interview" in the old prompt.
+describe("CLASSIFIER_SYSTEM_PROMPT: Screening", () => {
+  const line = (label: string) => CLASSIFIER_SYSTEM_PROMPT.split("\n").find((l) => l.startsWith(`- ${label}:`)) ?? "";
+
+  test("defines Screening as a recruiter intro, phone screen or availability request", () => {
+    const screening = line("Screening");
+    expect(screening).toMatch(/recruiter/i);
+    expect(screening).toMatch(/phone|video/i);
+    expect(screening).toMatch(/availability/i);
+  });
+
+  test("keeps Interview for the hiring manager or a technical round", () => {
+    const interview = line("Interview");
+    expect(interview).toMatch(/hiring manager/i);
+    expect(interview).toMatch(/technical/i);
+    expect(interview).not.toMatch(/availability/i);
+  });
+
+  test("files an in-house recruiter's personal cold outreach under Screening, not as a blast to ignore", () => {
+    expect(line("Screening")).toMatch(/in-house/i);
+    expect(CLASSIFIER_SYSTEM_PROMPT).not.toContain("recruiter prospecting where he has NOT already applied");
+    // Mass mail to many people is still not his process.
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/sent to many people|mass/i);
   });
 });
 

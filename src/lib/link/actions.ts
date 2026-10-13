@@ -8,17 +8,12 @@ import { applications, jobApplications, linkExamples, reviewItems } from "@/db/s
 import { isCategory } from "@/lib/categories";
 import { nextState } from "./nextState";
 import type { AppRow } from "./views";
-import { MANUAL_STAGE_FLAG, STAGES, type ApplicationState, type EmailKind, type Stage } from "./types";
+import { KIND_BY_CATEGORY, MANUAL_STAGE_FLAG, STAGES, type ApplicationState, type Stage } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = PgDatabase<any, any>;
 // Inside db.transaction the callback receives the same query surface.
 type Tx = Db;
-
-const KIND: Record<string, EmailKind> = {
-  Applied: "applied", Assessment: "assessment", Interview: "interview", Offer: "offer",
-  Rejection: "rejection", Reminder: "reminder", Verification: "verification",
-};
 
 function addressOf(from: string | null): string {
   const m = from?.match(/<([^>]+)>/);
@@ -77,7 +72,7 @@ async function rebuild(tx: Tx, appId: number) {
   let state: ApplicationState = { stage: "Applied", round: 0, status: "open", flags: [] };
   let appliedAt: Date | null = null;
   for (const e of emails) {
-    const kind = isCategory(e.category) ? KIND[e.category] : "marketing";
+    const kind = isCategory(e.category) ? KIND_BY_CATEGORY[e.category] : "marketing";
     if (kind === "applied" && !appliedAt) appliedAt = e.receivedAt;
     if (owner && addressOf(e.fromEmail) === owner) continue;
     state = nextState(state, { kind, round: e.interviewRound });

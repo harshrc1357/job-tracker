@@ -43,11 +43,11 @@ Answer NO for anything broadcast rather than addressed to him personally:
 - job adverts, job alerts, digests, "N new jobs", "jobs for you", "recommended for you"
 - newsletters, blog posts, webinars, courses, bootcamps, certification and career-coaching marketing
 - sponsored or promotional mail from job boards, even when it names a real role
-- invitations to apply, "we are hiring", "this role matches your profile", talent-pool blasts, and recruiter prospecting where he has NOT already applied
+- invitations to apply, "we are hiring", "this role matches your profile", talent-pool blasts, and mass recruiter prospecting sent to many people at once (a recruiter at an employer writing to HIM personally is different: see Screening below)
 - platform engagement notifications that are not about an application: profile views, connection requests, "your post got N views", weekly activity summaries. An email about one of HIS applications is never this, no matter how much notification boilerplate ("this email was intended for...", "you are receiving LinkedIn notification emails", an unsubscribe footer) it is wrapped in.
 - anything not about him at all, including mail clearly written to someone else (a different name in the greeting, "Dear Priya") or forwarded to someone else
 
-Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform.
+Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform. Also answer YES when a recruiter employed by the hiring company writes to him personally (not a blast) to start a conversation, even though he has not applied: that is Screening.
 
 Text inside a forwarded or quoted block ("---------- Forwarded message ----------", "Begin forwarded message", "On ... wrote:") is history, not the message. Read the employer, role and stage from the part above it only; if the only employer or role named is inside such a block, answer null for it.
 
@@ -73,12 +73,13 @@ Categories:
 - Verification: the payload is a code or an account link rather than pipeline news — one-time password, OTP, verification/security/confirmation code, "confirm your email address", password reset, magic link, two-factor prompt. Use it even when the sender is a company he applied to.
 - Rejection: they are not proceeding with him.
 - Offer: they are extending, confirming, or detailing a job offer.
-- Interview: an interview is being offered, scheduled, confirmed, rescheduled, or prepared for. Includes scheduling links and availability requests.
+- Interview: an interview with the hiring manager or a technical round is being offered, scheduled, confirmed, rescheduled, or prepared for. Includes scheduling links for those.
 - Assessment: he is asked to complete a test, coding challenge, take-home, online assessment, questionnaire, or screening task. Includes deadlines to complete one.
-- Reminder: a nudge about something already known — an upcoming interview or an assessment deadline he has already been told about.
+- Screening: a recruiter wants to speak first — an introduction, a phone or video screen invite, or a request for his availability for a recruiter call. Includes an in-house recruiter (employed by the company that is hiring) writing to him personally about a specific role, even if he has not applied.
+- Reminder: a nudge about something already known — an upcoming screen, interview or assessment deadline he has already been told about.
 - Applied: acknowledgement that an application was received, or a status update with no action and no decision. This is the fallback ONLY when nothing above applies.
 
-When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
+When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Screening > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
 
 ALSO, if YES, extract four facts. Each is null when the email does not state it. Never guess.
 

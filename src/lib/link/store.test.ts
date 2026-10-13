@@ -146,6 +146,26 @@ describe("linkPendingEmails", () => {
     expect(app.stage).toBe("Applied");
   });
 
+  test("a Screening email moves the application to the Screening stage", async () => {
+    await addEmail({ threadId: "t7" });
+    await addEmail({ threadId: "t7", category: "Screening", role: null });
+    await linkPendingEmails(db as never, { ownerEmail: null });
+    const apps = await db.select().from(jobApplications);
+    expect(apps).toHaveLength(1);
+    expect(apps[0]).toMatchObject({ stage: "Screening", status: "open" });
+  });
+
+  test("a Screening email with no Applied email before it still creates an application, flagged", async () => {
+    // A recruiter reached out first, or the Applied mail never reached the inbox.
+    await addEmail({ category: "Screening", role: "Data Scientist I" });
+    const summary = await linkPendingEmails(db as never, { ownerEmail: null });
+    expect(summary).toMatchObject({ created: 1, review: 0 });
+    const [app] = await db.select().from(jobApplications);
+    expect(app).toMatchObject({ employer: "Cotiviti", stage: "Screening" });
+    const [email] = await db.select().from(applications);
+    expect(email).toMatchObject({ linkState: "linked", linkFlagged: true });
+  });
+
   test("verification mail is marked ignored and never creates an application", async () => {
     await addEmail({ category: "Verification" });
     await linkPendingEmails(db as never, { ownerEmail: null });

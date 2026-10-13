@@ -1,5 +1,7 @@
 // Vocabulary follows GLOSSARY.md. The Linker is a pure function: facts in, decision out.
 
+import type { Category } from "@/lib/categories";
+
 export const STAGES = ["Applied", "Screening", "Assessment", "Interview", "Offer"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -19,6 +21,19 @@ export type EmailKind =
   | "outreach"
   | "verification"
   | "marketing";
+
+// The one place a classifier category becomes a kind. The sync-time linker and the rebuild
+// after an override both read it, so a new category cannot be known to one and not the other.
+export const KIND_BY_CATEGORY: Record<Category, EmailKind> = {
+  Applied: "applied",
+  Screening: "screening",
+  Assessment: "assessment",
+  Interview: "interview",
+  Offer: "offer",
+  Rejection: "rejection",
+  Reminder: "reminder",
+  Verification: "verification",
+};
 
 export type EmailFacts = {
   threadId: string | null;

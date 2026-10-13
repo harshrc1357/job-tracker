@@ -72,7 +72,7 @@ body {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 16px;
   margin-bottom: 32px;
 }
@@ -99,6 +99,9 @@ body {
   font-size: 13px;
   color: var(--ink-soft);
   margin-top: 4px;
+}
+.stat-card.screening .num {
+  color: var(--blue);
 }
 .stat-card.assessment .num {
   color: var(--gold);
@@ -377,6 +380,10 @@ tr:last-child td {
   flex-shrink: 0;
   background: var(--grey-soft);
   color: var(--grey);
+}
+.split-avatar.screening {
+  background: var(--blue-soft);
+  color: var(--blue);
 }
 .split-avatar.assessment {
   background: var(--gold-soft);

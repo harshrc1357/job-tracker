@@ -8,6 +8,7 @@ import * as schema from "@/db/schema";
 import { applications, jobApplications, linkExamples, reviewItems } from "@/db/schema";
 import { linkPendingEmails } from "./store";
 import { detachEmail, loadAppRows, mergeApplications, resolveReview, setStage, splitApplication } from "./actions";
+import { pipelineApps } from "./views";
 
 const { pushSchema } = createRequire(import.meta.url)("drizzle-kit/api") as typeof import("drizzle-kit/api");
 
@@ -50,6 +51,28 @@ describe("loadAppRows", () => {
     await link();
     const rows = await loadAppRows(db as never);
     expect(rows.every((r) => r.needsReview)).toBe(true);
+  });
+});
+
+describe("Screening applications", () => {
+  test("show up under the Pipeline Screening filter", async () => {
+    await addEmail({ threadId: "s1" });
+    await addEmail({ threadId: "s1", category: "Screening", role: null });
+    await link();
+    const rows = await loadAppRows(db as never);
+    expect(pipelineApps(rows, "screening")).toHaveLength(1);
+    expect(pipelineApps(rows, "active")).toHaveLength(1);
+  });
+
+  test("keep their stage when a later email is taken out and the application is rebuilt", async () => {
+    await addEmail({ threadId: "s2" });
+    await addEmail({ threadId: "s2", category: "Screening", role: null });
+    // Its own thread: detaching moves a whole thread, and the other two must stay.
+    const later = await addEmail({ threadId: "s2b", category: "Assessment" });
+    await link();
+    expect((await appsNow())[0].stage).toBe("Assessment");
+    await detachEmail(db as never, later.id);
+    expect((await appsNow())[0].stage).toBe("Screening");
   });
 });
 
