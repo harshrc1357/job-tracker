@@ -5,9 +5,21 @@
 
 import { CATEGORIES, isCategory, type Category } from "@/lib/categories";
 import { LlmError } from "@/lib/llm/errors";
+import { isAtsName } from "@/lib/link/normalize";
 
 export type Verdict =
-  | { isJob: true; category: Category; evidence: string }
+  | {
+      isJob: true;
+      category: Category;
+      evidence: string;
+      // The real employer (Cotiviti), never the ATS or recruiter's domain. null when the
+      // email does not say; the Linker asks rather than guessing.
+      employer: string | null;
+      // Job title including any term/cohort ("Spring 2027"). null when not stated.
+      role: string | null;
+      // Interview round when the email states one.
+      round: number | null;
+    }
   | { isJob: false; reason: string };
 
 // Two rules do the heavy lifting and both exist because of a specific failure:
@@ -64,10 +76,16 @@ Categories:
 
 When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
 
-Reply with ONLY a JSON object, no prose and no code fences:
+ALSO, if YES, extract three facts. Each is null when the email does not state it. Never guess.
+
+- "employer": the REAL employer he applied to (Cotiviti, Snowflake, Hewlett Packard Enterprise). Never the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), never "Hiring Team", and never a recruiter's own name. "Cotiviti @ icims" is Cotiviti. A recruiter at a staffing agency writing about a client: the client if named, otherwise null. Take it from the subject, the body, or the signature.
+- "role": the job title exactly as the email states it, KEEPING any term, cohort, team or location qualifier that distinguishes openings ("AI/ML SWE Intern - Spring 2027", "SWE Intern - Core Eng / Security"). Drop requisition ids. null if the email names no role.
+- "round": the interview round number if the email says one ("round 2", "second interview"), else null.
+
+Reply with ONLY a JSON object, no prose and no code fences. Keep this field order:
 {"isJob": true, "category": "<one of ${CATEGORIES.join(
   " | "
-)}>", "evidence": "<up to 15 words quoted from the email that decided the category>"}
+)}>", "employer": "<real employer or null>", "role": "<job title or null>", "round": <number or null>, "evidence": "<up to 15 words quoted from the email that decided the category>"}
 or
 {"isJob": false, "reason": "<up to 10 words>"}`;
 
@@ -75,7 +93,7 @@ or
 // that a model that decides to write an essay gets cut off rather than billed for it.
 // Raised from 160 after a real row hit the cap mid-evidence and came back as
 // unterminated JSON; salvageVerdict below covers the residual case.
-export const CLASSIFIER_MAX_TOKENS = 220;
+export const CLASSIFIER_MAX_TOKENS = 300;
 
 // Defensive on purpose. response_format: json_object makes fenced or prefixed output
 // rare, not impossible, and a parse failure here must never be read as "not job
@@ -104,7 +122,36 @@ export function parseVerdict(raw: string, model: string): Verdict {
     });
   }
 
-  return { isJob: true, category, evidence: asShortString(parsed.evidence) };
+  return {
+    isJob: true,
+    category,
+    evidence: asShortString(parsed.evidence),
+    employer: asEmployer(parsed.employer),
+    role: asNullableText(parsed.role),
+    round: asRound(parsed.round),
+  };
+}
+
+// A model that does not know says "null", "N/A" or "unknown" as often as it says null.
+// Every one of those must read as "not stated", never as an employer named "Unknown".
+const NOT_STATED = new Set(["", "null", "none", "n/a", "na", "unknown", "not stated", "not specified", "undefined"]);
+
+function asNullableText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim().slice(0, MAX_EVIDENCE_CHARS);
+  return NOT_STATED.has(text.toLowerCase()) ? null : text;
+}
+
+// An ATS name is a carrier, not an employer. Discarding it here means a wrong answer
+// becomes "unknown" (the Linker asks) instead of grouping unrelated applications
+// under "iCIMS".
+function asEmployer(value: unknown): string | null {
+  const text = asNullableText(value);
+  return text && !isAtsName(text) ? text : null;
+}
+
+function asRound(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 9 ? value : null;
 }
 
 const MAX_EVIDENCE_CHARS = 200;
@@ -127,7 +174,18 @@ function salvageTruncated(raw: string): Record<string, unknown> | null {
   if (!/"isJob"\s*:\s*true/.test(raw)) return null;
   const category = raw.match(/"category"\s*:\s*"([A-Za-z]+)"/);
   if (!category || !isCategory(category[1])) return null;
-  return { isJob: true, category: category[1], evidence: "" };
+  // Employer, role and round come before evidence in the prompt's field order, so a
+  // cut in the evidence leaves them complete. Each is only kept if it closed cleanly.
+  const text = (key: string) => raw.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`))?.[1] ?? null;
+  const round = raw.match(/"round"\s*:\s*(\d+)/);
+  return {
+    isJob: true,
+    category: category[1],
+    employer: text("employer"),
+    role: text("role"),
+    round: round ? Number(round[1]) : null,
+    evidence: "",
+  };
 }
 
 // Takes the first {...} block, so a stray "```json" fence or a leading "Here is"

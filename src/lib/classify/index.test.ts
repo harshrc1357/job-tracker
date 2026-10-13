@@ -45,6 +45,19 @@ afterEach(() => {
 const promptOf = (call: unknown[]): string =>
   JSON.parse(String((call[1] as RequestInit).body)).messages[1].content;
 
+describe("classifyEmail: extracted facts", () => {
+  test("a stored email carries the employer, role and round the model extracted, in the same single call", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer({ isJob: true, category: "Interview", employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2, evidence: "round 2" })
+    );
+
+    const result = await classifyEmail(email({ from: "Cotiviti @ icims <noreply@icims.com>", subject: "Your Cotiviti interview" }));
+
+    expect(result).toMatchObject({ decision: "store", employer: "Cotiviti", role: "Intern - Gen AI Research Engineer", round: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("classifyEmail", () => {
   test("rejects a bulk job digest for free, without spending a call", async () => {
     // Arrange: the single biggest source of inbox noise, and the cheapest to kill.
@@ -203,6 +216,9 @@ describe("classifyEmail", () => {
       decision: "store",
       category: "Offer",
       evidence: "pleased to offer you",
+      employer: null,
+      role: null,
+      round: null,
       model: PRIMARY_MODEL.id,
       usedFallback: false,
     });
