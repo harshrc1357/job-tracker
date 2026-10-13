@@ -127,6 +127,7 @@ export async function processMessage(
         classifiedBy: classification.model,
         classifierEvidence: classification.evidence,
         gmailMessageId: messageId,
+        threadId: full.data.threadId ?? null,
         company: extractCompany(from, subject),
         category,
         subject,

@@ -12,6 +12,10 @@ import {
 export const applications = pgTable("applications", {
   id: serial("id").primaryKey(),
   gmailMessageId: text("gmail_message_id").notNull().unique(),
+  // Gmail thread id. ATS systems reply in-thread, so a thread already linked to an
+  // application is the strongest evidence for linking the next email (see src/lib/link).
+  // Nullable: rows stored before this column existed are filled by scripts/backfill-thread-id.mts.
+  threadId: text("thread_id"),
   company: text("company").notNull(),
   role: text("role"),
   // Applied | Assessment | Interview | Offer | Rejection | Reminder | Verification
