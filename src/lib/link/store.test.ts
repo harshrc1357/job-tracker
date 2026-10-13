@@ -149,6 +149,15 @@ describe("linkPendingEmails", () => {
     expect((await db.select().from(jobApplications)).map((a) => a.employer)).toEqual(["Recent Co"]);
   });
 
+  test("can require that employer/role extraction has run, so un-extracted history is never linked from stale guesses", async () => {
+    await addEmail({ company: "Legacy Co" }); // stored before extraction existed: extractedAt null
+    await addEmail({ company: "Fresh Co", extractedAt: new Date() });
+    await linkPendingEmails(db as never, { ownerEmail: null, requireExtracted: true });
+    expect((await db.select().from(jobApplications)).map((a) => a.employer)).toEqual(["Fresh Co"]);
+    // The legacy row stays pending, and is picked up once something extracts it.
+    expect((await db.select().from(applications).where(eq(applications.company, "Legacy Co")))[0].linkState).toBeNull();
+  });
+
   test("respects the batch limit and leaves the rest for the next run", async () => {
     for (let i = 0; i < 5; i++) await addEmail({ company: `C${i}` });
     const first = await linkPendingEmails(db as never, { ownerEmail: null, limit: 3 });

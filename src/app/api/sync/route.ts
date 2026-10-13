@@ -31,6 +31,9 @@ export const maxDuration = 60;
 
 const MAX_LISTED_MESSAGES = 500;
 
+// Emails linked to applications per sync run. Small on purpose; see the linking block.
+const LINK_BATCH_PER_RUN = 10;
+
 // How many individual errors get quoted in the Telegram alert before it truncates.
 const MAX_ALERT_ERRORS = 5;
 
@@ -229,7 +232,6 @@ export async function GET(req: NextRequest) {
     // them. Anything left when the budget runs out simply stays unrecorded, so the
     // next tick picks it up — partial progress that reports itself beats a 504 that
     // reports nothing.
-    const storedThisRun: string[] = [];
     for (let offset = 0; offset < fresh.length; offset += SYNC_CONCURRENCY) {
       if (!hasTimeLeft()) {
         result.ranOutOfTime = true;
@@ -289,7 +291,6 @@ export async function GET(req: NextRequest) {
         .returning({ gmailMessageId: applications.gmailMessageId });
 
       const insertedIds = new Set(insertedRows.map((row) => row.gmailMessageId));
-      for (const id of insertedIds) storedThisRun.push(id);
       result.inserted += insertedRows.length;
 
       for (const outcome of toStore) {
@@ -313,15 +314,19 @@ export async function GET(req: NextRequest) {
     // deferred, cut off by the clock) comes back on the next run.
     result.remaining = Math.max(fresh.length - result.inserted - result.ignored, 0);
 
-    // Link only what this run stored. Older unlinked history waits for the explicit
-    // history script, because its employer values predate the extraction step and would
-    // flood the Review queue. A linking failure must never fail the sync: the emails are
-    // already stored and stay unlinked, so the next run (or the history script) retries.
-    if (storedThisRun.length > 0 && hasTimeLeft()) {
+    // Link recently stored mail, a few per run. Every email costs a handful of round trips
+    // on the pooled connection, so a burst after an outage must not turn one run into a
+    // timeout: the cap bounds it and the rest stays pending for the next tick (link_state
+    // is still null). requireExtracted keeps older history, whose employer is a
+    // sender-based guess, out of this path; scripts/link-history.mts links that after
+    // re-extracting it. A linking failure never fails the sync: the emails are already
+    // stored and simply stay unlinked until the next run.
+    if (hasTimeLeft()) {
       try {
         const linked = await linkPendingEmails(db, {
           ownerEmail: process.env.OWNER_EMAIL ?? null,
-          messageIds: storedThisRun,
+          requireExtracted: true,
+          limit: LINK_BATCH_PER_RUN,
         });
         result.linked = linked.created + linked.attached;
         result.needsReview = linked.review;

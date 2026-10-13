@@ -46,6 +46,10 @@ export async function linkPendingEmails(
     messageIds?: readonly string[];
     // Only mail received at or after this. The history script passes now-60d.
     since?: Date;
+    // Only emails whose employer/role extraction has run (extracted_at set). The live sync
+    // uses this so un-extracted history, whose company is a sender-based guess, is never
+    // linked from that guess and left to flood Review.
+    requireExtracted?: boolean;
   },
 ): Promise<LinkSummary> {
   const summary: LinkSummary = { processed: 0, created: 0, attached: 0, review: 0, ignored: 0 };
@@ -61,6 +65,7 @@ export async function linkPendingEmails(
         isNull(applications.linkState),
         opts.messageIds ? inArray(applications.gmailMessageId, [...opts.messageIds]) : undefined,
         opts.since ? gte(applications.receivedAt, opts.since) : undefined,
+        opts.requireExtracted ? isNotNull(applications.extractedAt) : undefined,
       ),
     )
     .orderBy(asc(applications.receivedAt), asc(applications.id))

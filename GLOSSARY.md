@@ -1,8 +1,8 @@
 # Glossary
 
-**Email** — one Gmail message that survived the prefilter and classifier. Today stored as a row in `applications` (misnamed; it is really an email). Never changes meaning of "Application" below.
+**Email** — one Gmail message that survived the prefilter and classifier. Stored as a row in the table named `applications` (a legacy misnomer; renaming it is a wide refactor left for later). Each Email points at its Application through `job_application_id`.
 
-**Application** — one attempt to get one **Role** at one **Employer**, from the Applied email onward. The unit shown on Pipeline, Applications and Detail. An Application owns many Emails. _Avoid:_ "job", "card" (a card is only how Pipeline draws an Application).
+**Application** — stored in `job_applications`. One attempt to get one **Role** at one **Employer**, from the Applied email onward. The unit shown on Pipeline, Applications and Detail. An Application owns many Emails. _Avoid:_ "job", "card" (a card is only how Pipeline draws an Application).
 
 **Employer** — the real company hiring (Cotiviti), never the ATS or the sender. Identified by a canonical name plus an alias list (HPE = Hewlett Packard Enterprise). _Avoid:_ "company" when the sender could be meant.
 
