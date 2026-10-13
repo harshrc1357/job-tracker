@@ -11,14 +11,11 @@ import { TabNav } from "../../TabNav";
 import { loadShellCounts } from "../../shell";
 import { detachEmailAction, mergeAction, setStageAction, splitAction } from "../../actions";
 
-export default async function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
-  if (!isDbConfigured) return <Notice>DATABASE_URL isn&apos;t set yet.</Notice>;
-  const { id: raw } = await params;
-  const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) notFound();
-
+// Null when there is no such Application. Sequential on purpose: the pooled connection
+// allows one query at a time.
+async function loadDetail(id: number) {
   const [app] = await db.select().from(jobApplications).where(eq(jobApplications.id, id));
-  if (!app) notFound();
+  if (!app) return null;
   const emails = await db
     .select({
       id: applications.id, category: applications.category, subject: applications.subject, fromEmail: applications.fromEmail,
@@ -30,8 +27,27 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
     .orderBy(asc(applications.receivedAt));
   const others = (await db.select().from(jobApplications)).filter((a) => a.id !== id);
   others.sort((a, b) => Number(b.employer === app.employer) - Number(a.employer === app.employer) || a.employer.localeCompare(b.employer));
+  const rows = await loadAppRows(db);
+  return { app, emails, others, rows };
+}
 
-  const shell = await loadShellCounts(db, await loadAppRows(db));
+export default async function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
+  if (!isDbConfigured) return <Notice>DATABASE_URL isn&apos;t set yet.</Notice>;
+  const { id: raw } = await params;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) notFound();
+
+  // notFound() throws, so it has to stay outside the try.
+  let loaded: Awaited<ReturnType<typeof loadDetail>>;
+  try {
+    loaded = await loadDetail(id);
+  } catch {
+    return <Notice>Couldn&apos;t reach the database. Check DATABASE_URL.</Notice>;
+  }
+  if (!loaded) notFound();
+  const { app, emails, others, rows } = loaded;
+
+  const shell = await loadShellCounts(db, rows);
 
   // The weakest link is the honest summary of "how sure are we this is one application".
   const confidences = emails.map((e) => e.linkConfidence).filter((c): c is number => c !== null);

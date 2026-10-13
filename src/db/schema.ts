@@ -49,7 +49,7 @@ export const applications = pgTable("applications", {
   // knowing which model answered and what text it pointed at.
   classifiedBy: text("classified_by"),
   classifierEvidence: text("classifier_evidence"),
-  // How this email was linked to a job application (see src/lib/link and GLOSSARY.md).
+  // How this email was linked to an Application, a row of job_applications (see src/lib/link and GLOSSARY.md).
   // null link_state = not processed yet; that is what makes linking idempotent.
   //   linked  attached to job_application_id
   //   review  the linker would not decide; a row in review_items waits for the owner

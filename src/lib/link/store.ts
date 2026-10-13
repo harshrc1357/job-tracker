@@ -5,7 +5,7 @@
 // Idempotency lives in emails.link_state: only rows where it is null are processed, and
 // every processed row leaves with a non-null state. Running it twice is a no-op.
 
-import { and, asc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
 import { isCategory, type Category } from "@/lib/categories";
@@ -187,10 +187,4 @@ export async function linkPendingEmails(
   });
 
   return summary;
-}
-
-// Re-exported for the Review page, which counts open items for its badge.
-export async function countOpenReviewItems(db: Db): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(reviewItems).where(isNull(reviewItems.resolvedAt));
-  return row?.n ?? 0;
 }

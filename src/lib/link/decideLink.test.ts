@@ -227,7 +227,7 @@ describe("decideLink: Applied emails and the 90-day window (scenarios 2, 31, 32,
     expect(decision.action).toBe("create");
   });
 
-  test("the same role confirmed twice within 90 days attaches, no new card", () => {
+  test("the same role confirmed twice within 90 days attaches, no new application", () => {
     const decision = decideLink(applied(), [app({ role: "Data Engineer", appliedAt: daysAgo(30) })]);
     expect(decision).toMatchObject({ action: "attach", applicationId: 1 });
   });

@@ -1,4 +1,4 @@
-// Builds job applications from the last 60 days of EXISTING emails. Two phases:
+// Builds Applications from the last 60 days of EXISTING emails. Two phases:
 //
 //   1. Re-extract: emails stored before the classifier returned employer / role / round
 //      are re-run through it (one LLM call each) so the linker has real employers rather

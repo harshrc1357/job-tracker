@@ -56,7 +56,7 @@ type SyncResult = {
   ranOutOfTime: boolean;
   hitLlmBudget: boolean;
   wasRateLimited: boolean;
-  // Emails linked to job applications this run, and how many the linker would not decide.
+  // Emails linked to Applications this run, and how many the linker would not decide.
   linked: number;
   needsReview: number;
   errors: string[];

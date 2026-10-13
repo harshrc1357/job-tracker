@@ -167,7 +167,7 @@ export function ApplicationsPanel({
   appLabels = {},
 }: {
   applications: Row[];
-  // job application id -> "Employer · Role", for the link under each email.
+  // Application id (job_applications.id, not an email's) -> "Employer · Role", for the link under each email.
   appLabels?: Record<number, string>;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("All");

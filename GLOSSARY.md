@@ -22,7 +22,7 @@
 
 **Split / Merge / Detach** — user overrides on an Application. Every override is stored as a labelled example.
 
-**Split bias** — when unsure the Linker creates/keeps separate Applications rather than merging. A wrong merge hides a live interview; a wrong split is two cards.
+**Split bias** — when unsure the Linker creates/keeps separate Applications rather than merging. A wrong merge hides a live interview; a wrong split is two Applications.
 
 **Progressed** — an Application with any Email past Applied. Only Progressed Applications appear on Pipeline.
 

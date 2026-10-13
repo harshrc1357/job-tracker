@@ -12,8 +12,8 @@ import { resolveReviewAction } from "../actions";
 
 type Candidate = { applicationId: number; score: number };
 
-export default async function ReviewPage() {
-  if (!isDbConfigured) return <Notice>DATABASE_URL isn&apos;t set yet.</Notice>;
+// Sequential on purpose: the pooled connection allows one query at a time.
+async function loadReview() {
   const items = await db
     .select({
       id: reviewItems.id, evidence: reviewItems.evidence, confidence: reviewItems.confidence, candidates: reviewItems.candidates,
@@ -25,7 +25,20 @@ export default async function ReviewPage() {
     .where(isNull(reviewItems.resolvedAt))
     .orderBy(asc(applications.receivedAt));
   const apps = new Map((await db.select().from(jobApplications)).map((a) => [a.id, a]));
-  const shell = await loadShellCounts(db, await loadAppRows(db));
+  const rows = await loadAppRows(db);
+  return { items, apps, rows };
+}
+
+export default async function ReviewPage() {
+  if (!isDbConfigured) return <Notice>DATABASE_URL isn&apos;t set yet.</Notice>;
+  let loaded: Awaited<ReturnType<typeof loadReview>>;
+  try {
+    loaded = await loadReview();
+  } catch {
+    return <Notice>Couldn&apos;t reach the database. Check DATABASE_URL.</Notice>;
+  }
+  const { items, apps, rows } = loaded;
+  const shell = await loadShellCounts(db, rows);
 
   return (
     <>

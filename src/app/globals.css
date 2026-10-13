@@ -37,14 +37,6 @@ body {
   padding: 40px 24px 64px;
 }
 
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
 .title-block h1 {
   font-size: 28px;
   font-weight: 700;

@@ -1,5 +1,5 @@
 // Measures how well the classifier extracts employer / role / round on YOUR real mail.
-// Two steps so the ground truth is yours, not the model's:
+// Three steps so the ground truth is yours, not the model's:
 //
 //   1. npm run eval:extraction -- --sample=100
 //      Picks N stored emails, runs the classifier on each, and writes
