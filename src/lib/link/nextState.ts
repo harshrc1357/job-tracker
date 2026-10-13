@@ -11,7 +11,7 @@ const STAGE_BY_KIND: Partial<Record<EmailKind, Stage>> = {
 
 // Only these can reopen a rejected application. A late Applied confirmation, a reminder
 // or a repeat rejection says nothing new about whether the employer is back in touch.
-const REOPENS: readonly EmailKind[] = ["screening", "assessment", "interview", "offer"];
+export const REOPENING_KINDS: readonly EmailKind[] = ["screening", "assessment", "interview", "offer"];
 
 const rank = (stage: Stage) => STAGES.indexOf(stage);
 
@@ -28,7 +28,7 @@ export function nextState(
   }
 
   let status = current.status;
-  if (status === "rejected" && REOPENS.includes(email.kind)) {
+  if (status === "rejected" && REOPENING_KINDS.includes(email.kind)) {
     status = "open";
     flags.push("reopened");
   }

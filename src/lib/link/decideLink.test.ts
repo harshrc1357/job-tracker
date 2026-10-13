@@ -282,6 +282,11 @@ describe("decideLink: rejections never close the wrong thing (scenarios 26, 27, 
     expect(decision).toMatchObject({ action: "attach", reopen: true, flagged: true });
   });
 
+  test("a reminder in a rejected thread attaches but does not reopen it", () => {
+    const decision = decideLink(mail({ threadId: "t1", kind: "reminder" }), [app({ threadIds: ["t1"], rejected: true })]);
+    expect(decision).toMatchObject({ action: "attach", reopen: false });
+  });
+
   test("a duplicate Applied email in a rejected thread does not reopen it", () => {
     const decision = decideLink(mail({ threadId: "t1", kind: "applied" }), [app({ threadIds: ["t1"], rejected: true })]);
     expect(decision).toMatchObject({ action: "attach", reopen: false });

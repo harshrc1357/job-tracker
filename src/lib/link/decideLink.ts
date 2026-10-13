@@ -1,3 +1,4 @@
+import { REOPENING_KINDS } from "./nextState";
 import { isAtsName, normalizeEmployer, roleSimilarity } from "./normalize";
 import type { Candidate, Decision, EmailFacts, EmailKind, OpenApplication } from "./types";
 
@@ -55,9 +56,9 @@ function decideNonTrivial(email: EmailFacts, apps: readonly OpenApplication[]): 
   }
   if (byThread.length === 1) {
     const [owner] = byThread;
-    // Mail after a rejection reopens the card, except a duplicate Applied confirmation
-    // or a second rejection, which say nothing new.
-    const reopen = owner.rejected && email.kind !== "applied" && email.kind !== "rejection";
+    // Only mail that moves a process forward reopens a rejected card. A duplicate
+    // Applied confirmation, a reminder or a second rejection say nothing new.
+    const reopen = owner.rejected && REOPENING_KINDS.includes(email.kind);
     return attach(owner.id, 1, reopen ? "thread belongs to a rejected application; new mail reopens it" : "Gmail thread already belongs to this application", { flagged: reopen, reopen });
   }
 
@@ -112,7 +113,9 @@ function decideFollowUp(email: EmailFacts, atEmployer: readonly OpenApplication[
     if (closed) {
       return email.kind === "rejection"
         ? attach(closed.applicationId, strongConfidence(closed.score), "already-rejected application; repeat rejection")
-        : attach(closed.applicationId, 0.75, "mail for a previously rejected application; reopens it", { flagged: true, reopen: true });
+        : REOPENING_KINDS.includes(email.kind)
+        ? attach(closed.applicationId, 0.75, "mail for a previously rejected application; reopens it", { flagged: true, reopen: true })
+        : attach(closed.applicationId, 0.75, "mail for a previously rejected application", { flagged: true });
     }
     return PROGRESS_KINDS.includes(email.kind)
       ? { action: "create", confidence: 0.75, flagged: true, evidence: "progress mail for a role with no application; Applied email likely missing" }
