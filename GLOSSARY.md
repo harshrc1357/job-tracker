@@ -26,6 +26,10 @@
 
 **Progressed** — an Application with any Email past Applied. Only Progressed Applications appear on Pipeline.
 
-**Ghosted** — Applied-only with no reply for 30+ days. Never deleted.
+**Ghosted** — an open (not Rejected) Application, at any Stage, with no Email for 30+ days. Derived from the last activity on every read and never stored, so a new Email clears it. A badge on Pipeline cards and a filter on Applications. Never deleted.
+
+**Screening** — a recruiter's introduction, phone or video screen invite, or request for your availability. An Email category and the Stage after Applied. An in-house recruiter's personal cold outreach counts as Screening. Gets Telegram messages like Interview, Assessment and Offer.
+
+**Staffing/recruiter** — an Email category (the label is exact) for a staffing agency recruiter sending position details or a job description and asking you to apply. Stored and shown in the Inbox, with the agency as the Employer. Never an Application on its own, never a Review item, never a Telegram message; it joins an Application only when its Thread later becomes a Screening, Assessment, Interview or Offer.
 
 **Re-application window** — 90 days. A new Applied email for the same Employer + Role inside it attaches to the existing Application; after it, it starts a new one.

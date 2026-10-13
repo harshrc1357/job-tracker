@@ -224,6 +224,11 @@ tr:last-child td {
   background: var(--coral-soft);
   color: var(--coral);
 }
+.badge.ghosted {
+  background: var(--grey-soft);
+  color: var(--grey);
+  margin-left: 8px;
+}
 .badge .dot {
   width: 6px;
   height: 6px;
