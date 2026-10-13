@@ -13,7 +13,7 @@ Built and tested without any secrets (run `npm test`; PGlite runs real SQL in-pr
 ## Needs your machine (real DB and keys), in this order
 
 1. Back up the database, or use a Supabase branch.
-2. `npm run migrate:linking`, then `npm run db:secure` (adds RLS to the new tables).
+2. `npm run migrate:linking`, then `npm run db:secure` (adds RLS to the new tables). The migration also adds `employer` and `via` columns to emails. Emails stored before this have no `employer` until `link:history` re-extracts them, so they wait rather than being linked by a sender-name guess.
 3. `npm run backfill:threads -- --dry-run`, then `npm run backfill:threads`.
 4. `npm run eval:extraction -- --sample=100`, hand-fill the `expected` fields in `logs/extraction-eval.json`, then `npm run eval:extraction -- --score`. Do this before step 5.
 5. Set `LLM_CALLS_PER_DAY=3000` in your local `.env` only. `npm run link:history -- --dry-run`, then `npm run link:history`. Unset the variable afterwards. See `docs/llm-limits-audit.md`.

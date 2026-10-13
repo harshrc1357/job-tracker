@@ -66,6 +66,27 @@ describe("setStage", () => {
   });
 });
 
+describe("setStage can mark an application Rejected and reopen it", () => {
+  test("choosing Rejected keeps the stage it reached and closes the application", async () => {
+    await addEmail({ category: "Interview" });
+    await link();
+    const [app] = await appsNow();
+    await setStage(db as never, app.id, "Rejected");
+    const [after] = await appsNow();
+    expect(after).toMatchObject({ stage: "Interview", status: "rejected" });
+    expect(after.flags).toContain("manual-stage");
+  });
+
+  test("choosing a stage on a rejected application reopens it at that stage", async () => {
+    await addEmail({ category: "Interview" });
+    await addEmail({ category: "Rejection", role: null });
+    await link();
+    expect((await appsNow())[0].status).toBe("rejected");
+    await setStage(db as never, (await appsNow())[0].id, "Assessment");
+    expect((await appsNow())[0]).toMatchObject({ stage: "Assessment", status: "open" });
+  });
+});
+
 describe("detachEmail", () => {
   test("takes the email back out of its application and puts it in Review", async () => {
     const a = await addEmail({ threadId: "t1" });

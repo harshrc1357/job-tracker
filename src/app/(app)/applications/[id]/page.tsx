@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { db, isDbConfigured } from "@/db/client";
 import { applications, jobApplications } from "@/db/schema";
-import { STAGES } from "@/lib/link/types";
+import { MANUAL_STAGE_FLAG, STAGES } from "@/lib/link/types";
 import { fullDate } from "@/lib/format";
 import { loadAppRows } from "@/lib/link/actions";
 import { Notice } from "../../Notice";
@@ -53,7 +53,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
               <span className="dot" />
               {rejected ? `Rejected · was ${stageText}` : stageText}
             </span>
-            {app.flags.filter((f) => f !== "manual-stage").map((f) => (
+            {app.flags.filter((f) => f !== MANUAL_STAGE_FLAG).map((f) => (
               <span key={f} className="badge reminder" style={{ marginLeft: 8 }}>{f}</span>
             ))}
           </div>
@@ -95,8 +95,9 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
           <form action={setStageAction} className="row-form">
             <input type="hidden" name="appId" value={id} />
             <label className="dim" htmlFor="stage">Change stage</label>
-            <select id="stage" name="stage" defaultValue={app.stage}>
+            <select id="stage" name="stage" defaultValue={app.status === "rejected" ? "Rejected" : app.stage}>
               {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+              <option value="Rejected">Rejected</option>
             </select>
             <button className="btn" type="submit">Set stage</button>
           </form>

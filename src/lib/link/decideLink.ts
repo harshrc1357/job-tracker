@@ -14,7 +14,7 @@ const REAPPLY_WINDOW_DAYS = 90;
 const DAY_MS = 86_400_000;
 
 // Mail that moves an application forward. If one arrives for a role we have no
-// application for, the Applied email probably never reached us, so we create the card.
+// application for, the Applied email probably never reached us, so we create the application.
 const PROGRESS_KINDS: readonly EmailKind[] = ["screening", "assessment", "interview", "offer"];
 
 function strongConfidence(sim: number): number {
@@ -56,7 +56,7 @@ function decideNonTrivial(email: EmailFacts, apps: readonly OpenApplication[]): 
   }
   if (byThread.length === 1) {
     const [owner] = byThread;
-    // Only mail that moves a process forward reopens a rejected card. A duplicate
+    // Only mail that moves a process forward reopens a rejected application. A duplicate
     // Applied confirmation, a reminder or a second rejection say nothing new.
     const reopen = owner.rejected && REOPENING_KINDS.includes(email.kind);
     return attach(owner.id, 1, reopen ? "thread belongs to a rejected application; new mail reopens it" : "Gmail thread already belongs to this application", { flagged: reopen, reopen });

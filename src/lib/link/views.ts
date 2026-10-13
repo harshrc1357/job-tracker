@@ -56,8 +56,8 @@ export function pipelineCounts(apps: readonly AppRow[]): Record<PipelineFilter, 
   return Object.fromEntries(PIPELINE_FILTERS.map((f) => [f, pipelineApps(apps, f).length])) as Record<PipelineFilter, number>;
 }
 
-export function filterApplications(apps: readonly AppRow[], filter: ApplicationFilter, now: Date, company?: string): AppRow[] {
-  const wanted = company?.trim().toLowerCase();
+export function filterApplications(apps: readonly AppRow[], filter: ApplicationFilter, now: Date, employer?: string): AppRow[] {
+  const wanted = employer?.trim().toLowerCase();
   const pick: Record<ApplicationFilter, (a: AppRow) => boolean> = {
     all: () => true,
     "applied-only": (a) => !isProgressed(a),

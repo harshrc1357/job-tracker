@@ -99,7 +99,7 @@ describe("Applications table and Ghosted 30d+", () => {
     expect(filterApplications(apps, "ghosted", NOW)).toHaveLength(1);
   });
 
-  test("a company filter is case-insensitive and exact on the employer", () => {
+  test("an employer filter is case-insensitive and exact on the employer", () => {
     const mixed = [row({ employer: "Snowflake" }), row({ employer: "Snowflake Computing" }), row({ employer: "Cotiviti" })];
     expect(filterApplications(mixed, "all", NOW, "snowflake")).toHaveLength(1);
   });

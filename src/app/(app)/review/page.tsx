@@ -3,6 +3,8 @@ import { db, isDbConfigured } from "@/db/client";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
 import { shortDate } from "@/lib/format";
 import { loadAppRows } from "@/lib/link/actions";
+import { normalizeEmployer } from "@/lib/link/normalize";
+import { reviewChoices } from "@/lib/link/reviewChoices";
 import { Notice } from "../Notice";
 import { TabNav } from "../TabNav";
 import { loadShellCounts } from "../shell";
@@ -15,7 +17,7 @@ export default async function ReviewPage() {
   const items = await db
     .select({
       id: reviewItems.id, evidence: reviewItems.evidence, confidence: reviewItems.confidence, candidates: reviewItems.candidates,
-      subject: applications.subject, company: applications.company, role: applications.role,
+      subject: applications.subject, company: applications.company, employer: applications.employer, role: applications.role,
       fromEmail: applications.fromEmail, receivedAt: applications.receivedAt,
     })
     .from(reviewItems)
@@ -29,14 +31,19 @@ export default async function ReviewPage() {
     <>
       <TabNav counts={shell} />
       <p className="dim" style={{ marginBottom: 16 }}>
-        Only emails the linker would not decide. When it is unsure it splits rather than merges, so a wrong guess is two cards, never a live interview hidden behind another role&apos;s rejection.
+        Only emails the linker would not decide. When it is unsure it splits rather than merges, so a wrong guess is two applications, never a live interview hidden behind another role&apos;s rejection.
       </p>
       {items.length === 0 ? (
         <Notice>Nothing to review.</Notice>
       ) : (
         <div className="review-list">
           {items.map((it) => {
-            const candidates = (it.candidates as Candidate[]).filter((c) => apps.has(c.applicationId)).sort((a, b) => b.score - a.score);
+            const employer = normalizeEmployer(it.employer);
+            const openAtEmployer = employer
+              ? [...apps.values()].filter((a) => a.status === "open" && normalizeEmployer(a.employer) === employer).map((a) => ({ id: a.id, lastActivityAt: a.lastActivityAt }))
+              : [];
+            const candidates = (it.candidates as Candidate[]).filter((c) => apps.has(c.applicationId));
+            const choices = reviewChoices(candidates, openAtEmployer);
             return (
               <div key={it.id} className="review-card">
                 <h3>“{it.subject ?? "(no subject)"}” — {shortDate(it.receivedAt)}</h3>
@@ -45,15 +52,14 @@ export default async function ReviewPage() {
                 </div>
                 <div className="why">{it.evidence} · confidence {it.confidence.toFixed(2)}</div>
                 <div className="choices">
-                  {candidates.map((c, i) => {
-                    const a = apps.get(c.applicationId)!;
+                  {choices.attach.map((id) => {
+                    const a = apps.get(id)!;
                     return (
-                      <form key={c.applicationId} action={resolveReviewAction}>
+                      <form key={id} action={resolveReviewAction}>
                         <input type="hidden" name="itemId" value={it.id} />
                         <input type="hidden" name="choice" value="attach" />
-                        <input type="hidden" name="applicationId" value={c.applicationId} />
-                        {/* Highlight only a genuine recommendation: the top scorer, and only when it scored. */}
-                        <button className={`btn ${i === 0 && c.score > 0 ? "primary" : ""}`} type="submit">
+                        <input type="hidden" name="applicationId" value={id} />
+                        <button className={`btn ${choices.recommended === id ? "primary" : ""}`} type="submit">
                           {a.employer} · {a.role ?? "role not stated"} · {a.stage}
                         </button>
                       </form>
@@ -62,7 +68,7 @@ export default async function ReviewPage() {
                   <form action={resolveReviewAction}>
                     <input type="hidden" name="itemId" value={it.id} />
                     <input type="hidden" name="choice" value="new" />
-                    <button className="btn" type="submit">New application</button>
+                    <button className={`btn ${choices.recommended === "new" ? "primary" : ""}`} type="submit">New application</button>
                   </form>
                   <form action={resolveReviewAction}>
                     <input type="hidden" name="itemId" value={it.id} />

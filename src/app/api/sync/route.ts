@@ -199,7 +199,7 @@ export async function GET(req: NextRequest) {
     result.listed = messages.length;
 
     // One query for every id we already hold, instead of a SELECT per message. At a
-    // 14-day window that was 100+ sequential database round trips per run before any
+    // 60-day window that is 100+ sequential database round trips per run before any
     // real work started, and it is most of why every run was hitting the 60s wall.
     //
     // Sequential, NOT Promise.all. Supabase's transaction-mode pooler assigns a

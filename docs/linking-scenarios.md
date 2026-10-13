@@ -41,7 +41,7 @@ Every scenario below becomes a test against the Linker (and Stage rules) before 
 ## Re-application and duplicates
 31. Second Applied email, same Employer + Role, inside 90 days → attach, no new card (duplicate confirmation).
 32. Same, after 90 days → new Application.
-33. Applied confirmation resent/duplicated with identical subject → idempotent, one Email event.
+33. Applied confirmation resent/duplicated with identical subject → attaches to the same Application inside the 90-day window (no second Application). Each resent message is its own Email event, because Gmail gives it a new message id.
 34. Applied after a Rejection of the same Role within 90 days → new Application (explicit retry), flagged.
 
 ## Non-application mail

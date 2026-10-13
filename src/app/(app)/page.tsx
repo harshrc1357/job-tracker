@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db, isDbConfigured } from "@/db/client";
 import { loadAppRows } from "@/lib/link/actions";
 import { PIPELINE_FILTERS, pipelineApps, pipelineCounts, type AppRow, type PipelineFilter } from "@/lib/link/views";
-import { STAGES } from "@/lib/link/types";
+import { MANUAL_STAGE_FLAG, STAGES } from "@/lib/link/types";
 import { shortDate } from "@/lib/format";
 import { Notice } from "./Notice";
 import { TabNav } from "./TabNav";
@@ -79,7 +79,7 @@ function PipelineCard({ app }: { app: AppRow }) {
       <div className="meta">
         <b>{app.emailCount}</b> {app.emailCount === 1 ? "email" : "emails"} · last {shortDate(app.lastActivityAt)}
         {app.needsReview && <span className="flag"> · a linked email needs review</span>}
-        {app.flags.filter((x) => x !== "manual-stage").map((x) => (
+        {app.flags.filter((x) => x !== MANUAL_STAGE_FLAG).map((x) => (
           <span key={x} className="flag"> · {x}</span>
         ))}
       </div>

@@ -218,6 +218,11 @@ describe("CLASSIFIER_SYSTEM_PROMPT: extraction rules", () => {
     expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/Spring 2027/);
   });
 
+  test("tells the model to ignore forwarded blocks and mail written to someone else (scenarios 19, 40)", () => {
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/Forwarded message/i);
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/written to someone else/i);
+  });
+
   test("asks for employer and role before evidence, so a truncated answer keeps them", () => {
     const at = (s: string) => CLASSIFIER_SYSTEM_PROMPT.lastIndexOf(s);
     expect(at('"employer"')).toBeLessThan(at('"evidence"'));

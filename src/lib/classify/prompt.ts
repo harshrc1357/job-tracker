@@ -45,9 +45,11 @@ Answer NO for anything broadcast rather than addressed to him personally:
 - sponsored or promotional mail from job boards, even when it names a real role
 - invitations to apply, "we are hiring", "this role matches your profile", talent-pool blasts, and recruiter prospecting where he has NOT already applied
 - platform engagement notifications that are not about an application: profile views, connection requests, "your post got N views", weekly activity summaries. An email about one of HIS applications is never this, no matter how much notification boilerplate ("this email was intended for...", "you are receiving LinkedIn notification emails", an unsubscribe footer) it is wrapped in.
-- anything not about him at all
+- anything not about him at all, including mail clearly written to someone else (a different name in the greeting, "Dear Priya") or forwarded to someone else
 
 Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform.
+
+Text inside a forwarded or quoted block ("---------- Forwarded message ----------", "Begin forwarded message", "On ... wrote:") is history, not the message. Read the employer, role and stage from the part above it only; if the only employer or role named is inside such a block, answer null for it.
 
 The sender does NOT decide this. Most application mail is relayed by a job board or an ATS — LinkedIn, Indeed, Ashby, Greenhouse, Lever, Workday, iCIMS, SmartRecruiters — and arrives from a noreply address on their domain rather than from the company. That is still YES. What decides it is whether the email is about ONE named role he already applied to.
 

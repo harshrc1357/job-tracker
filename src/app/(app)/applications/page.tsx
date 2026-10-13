@@ -15,10 +15,10 @@ const PAGE_SIZE = 200;
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ f?: string; company?: string; page?: string }>;
+  searchParams: Promise<{ f?: string; employer?: string; page?: string }>;
 }) {
   if (!isDbConfigured) return <Notice>DATABASE_URL isn&apos;t set yet.</Notice>;
-  const { f, company, page } = await searchParams;
+  const { f, employer, page } = await searchParams;
   const filter = (APPLICATION_FILTERS as readonly string[]).includes(f ?? "") ? (f as ApplicationFilter) : "all";
 
   let rows: AppRow[];
@@ -31,12 +31,12 @@ export default async function ApplicationsPage({
   const now = new Date();
   const counts = applicationCounts(rows, now);
   const employers = [...new Set(rows.map((r) => r.employer))].sort((a, b) => a.localeCompare(b));
-  const list = filterApplications(rows, filter, now, company);
+  const list = filterApplications(rows, filter, now, employer);
   const pageNo = Math.max(1, Number(page) || 1);
   const shown = list.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE);
   const href = (over: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
-    const merged = { f: filter === "all" ? undefined : filter, company, ...over };
+    const merged = { f: filter === "all" ? undefined : filter, employer, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) q.set(k, v);
     const s = q.toString();
     return `/applications${s ? `?${s}` : ""}`;
@@ -53,8 +53,8 @@ export default async function ApplicationsPage({
         ))}
         <form action="/applications" className="row-form">
           {f && <input type="hidden" name="f" value={filter} />}
-          <select name="company" defaultValue={company ?? ""} aria-label="Company">
-            <option value="">Company: any</option>
+          <select name="employer" defaultValue={employer ?? ""} aria-label="Employer">
+            <option value="">Employer: any</option>
             {employers.map((e) => (
               <option key={e} value={e}>{e}</option>
             ))}
@@ -70,7 +70,7 @@ export default async function ApplicationsPage({
             <table>
               <thead>
                 <tr>
-                  <th>Company</th><th>Role</th><th>Stage</th><th>Emails</th><th>Applied</th><th>Last activity</th>
+                  <th>Employer</th><th>Role</th><th>Stage</th><th>Emails</th><th>Applied</th><th>Last activity</th>
                 </tr>
               </thead>
               <tbody>

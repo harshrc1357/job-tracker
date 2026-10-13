@@ -8,7 +8,7 @@ import { applications, jobApplications, linkExamples, reviewItems } from "@/db/s
 import { isCategory } from "@/lib/categories";
 import { nextState } from "./nextState";
 import type { AppRow } from "./views";
-import { STAGES, type ApplicationState, type EmailKind, type Stage } from "./types";
+import { MANUAL_STAGE_FLAG, STAGES, type ApplicationState, type EmailKind, type Stage } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = PgDatabase<any, any>;
@@ -83,7 +83,7 @@ async function rebuild(tx: Tx, appId: number) {
     state = nextState(state, { kind, round: e.interviewRound });
   }
 
-  const manual = app.flags.includes("manual-stage");
+  const manual = app.flags.includes(MANUAL_STAGE_FLAG);
   await tx
     .update(jobApplications)
     .set({
@@ -118,13 +118,16 @@ const factsOf = (e: typeof applications.$inferSelect) => ({
   employer: e.company, role: e.role, threadId: e.threadId, confidence: e.linkConfidence, evidence: e.linkEvidence,
 });
 
-export async function setStage(db: Db, appId: number, stage: Stage): Promise<void> {
+// "Rejected" is not a stage: it closes the application where it stands. Any stage reopens
+// an application that was rejected.
+export async function setStage(db: Db, appId: number, choice: Stage | "Rejected"): Promise<void> {
   await db.transaction(async (tx) => {
     const [app] = await tx.select().from(jobApplications).where(eq(jobApplications.id, appId));
     if (!app) throw new Error("application not found");
-    const flags = app.flags.includes("manual-stage") ? app.flags : [...app.flags, "manual-stage"];
-    await tx.update(jobApplications).set({ stage, flags }).where(eq(jobApplications.id, appId));
-    await example(tx, { kind: "stage", toApplicationId: appId, facts: { from: app.stage, to: stage } });
+    const flags = app.flags.includes(MANUAL_STAGE_FLAG) ? app.flags : [...app.flags, MANUAL_STAGE_FLAG];
+    const change = choice === "Rejected" ? { status: "rejected" } : { stage: choice, status: "open" };
+    await tx.update(jobApplications).set({ ...change, flags }).where(eq(jobApplications.id, appId));
+    await example(tx, { kind: "stage", toApplicationId: appId, facts: { from: app.status === "rejected" ? "Rejected" : app.stage, to: choice } });
   });
 }
 

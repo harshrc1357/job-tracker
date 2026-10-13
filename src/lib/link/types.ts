@@ -3,6 +3,10 @@
 export const STAGES = ["Applied", "Screening", "Assessment", "Interview", "Offer"] as const;
 export type Stage = (typeof STAGES)[number];
 
+// Set on an application when the owner overrides its stage; rebuilds then leave the stage,
+// round, status and flags alone. Hidden from the flag chips on the pages.
+export const MANUAL_STAGE_FLAG = "manual-stage";
+
 // What kind of message this is, as extracted by the classifier (T4).
 export type EmailKind =
   | "applied"
@@ -48,7 +52,7 @@ export type Decision =
       action: "attach";
       applicationId: number;
       confidence: number;
-      // true for 0.70-0.89: attached, but shown on the card for the owner to glance at.
+      // true for 0.70-0.89: attached, but shown on the application for the owner to glance at.
       flagged: boolean;
       // true when the email follows a rejection and so reopens the application.
       reopen: boolean;

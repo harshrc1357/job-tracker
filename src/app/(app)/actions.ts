@@ -24,8 +24,8 @@ function refresh(appId?: number) {
 export async function setStageAction(form: FormData) {
   const appId = int(form.get("appId"));
   const stage = String(form.get("stage"));
-  if (!(STAGES as readonly string[]).includes(stage)) throw new Error("bad stage");
-  await setStage(db, appId, stage as Stage);
+  if (stage !== "Rejected" && !(STAGES as readonly string[]).includes(stage)) throw new Error("bad stage");
+  await setStage(db, appId, stage as Stage | "Rejected");
   refresh(appId);
 }
 
