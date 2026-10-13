@@ -133,6 +133,8 @@ export async function processMessage(
         // become a card's company.
         company: classification.employer ?? extractCompany(from, subject),
         role: classification.role,
+        interviewRound: classification.round,
+        extractedAt: new Date(),
         category,
         subject,
         snippet,

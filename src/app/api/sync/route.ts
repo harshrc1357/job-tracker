@@ -23,6 +23,7 @@ import {
   type MessageOutcome,
 } from "@/lib/sync/message";
 import { lookbackDays } from "@/lib/sync/lookback";
+import { linkPendingEmails } from "@/lib/link/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,6 +53,9 @@ type SyncResult = {
   ranOutOfTime: boolean;
   hitLlmBudget: boolean;
   wasRateLimited: boolean;
+  // Emails linked to job applications this run, and how many the linker would not decide.
+  linked: number;
+  needsReview: number;
   errors: string[];
 };
 
@@ -126,6 +130,8 @@ export async function GET(req: NextRequest) {
     ranOutOfTime: false,
     hitLlmBudget: false,
     wasRateLimited: false,
+    linked: 0,
+    needsReview: 0,
     errors: [],
   };
 
@@ -223,6 +229,7 @@ export async function GET(req: NextRequest) {
     // them. Anything left when the budget runs out simply stays unrecorded, so the
     // next tick picks it up — partial progress that reports itself beats a 504 that
     // reports nothing.
+    const storedThisRun: string[] = [];
     for (let offset = 0; offset < fresh.length; offset += SYNC_CONCURRENCY) {
       if (!hasTimeLeft()) {
         result.ranOutOfTime = true;
@@ -282,6 +289,7 @@ export async function GET(req: NextRequest) {
         .returning({ gmailMessageId: applications.gmailMessageId });
 
       const insertedIds = new Set(insertedRows.map((row) => row.gmailMessageId));
+      for (const id of insertedIds) storedThisRun.push(id);
       result.inserted += insertedRows.length;
 
       for (const outcome of toStore) {
@@ -304,6 +312,23 @@ export async function GET(req: NextRequest) {
     // done when it is either stored or recorded as ignored — anything else (errored,
     // deferred, cut off by the clock) comes back on the next run.
     result.remaining = Math.max(fresh.length - result.inserted - result.ignored, 0);
+
+    // Link only what this run stored. Older unlinked history waits for the explicit
+    // history script, because its employer values predate the extraction step and would
+    // flood the Review queue. A linking failure must never fail the sync: the emails are
+    // already stored and stay unlinked, so the next run (or the history script) retries.
+    if (storedThisRun.length > 0 && hasTimeLeft()) {
+      try {
+        const linked = await linkPendingEmails(db, {
+          ownerEmail: process.env.OWNER_EMAIL ?? null,
+          messageIds: storedThisRun,
+        });
+        result.linked = linked.created + linked.attached;
+        result.needsReview = linked.review;
+      } catch (err) {
+        result.errors.push(`link: ${describe(err)}`);
+      }
+    }
 
     await runReminderPass(result, hasTimeLeft);
   } catch (err) {

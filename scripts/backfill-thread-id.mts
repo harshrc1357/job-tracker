@@ -6,7 +6,7 @@
 // Resumable and idempotent: only rows with thread_id IS NULL are touched, so Ctrl-C and
 // rerun costs nothing. Prints counts only, never message content or credentials.
 //
-// Usage, from the project root, after `npm run migrate:threads`:
+// Usage, from the project root, after `npm run migrate:linking`:
 //   npm run backfill:threads -- --dry-run
 //   npm run backfill:threads
 

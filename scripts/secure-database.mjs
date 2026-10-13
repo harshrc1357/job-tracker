@@ -35,7 +35,7 @@ import postgres from "postgres";
 
 // Every table the app owns. Listed explicitly rather than discovered so a table that
 // genuinely SHOULD be public later has to be removed from this list on purpose.
-const TABLES = ["applications", "google_auth", "ignored_messages", "llm_usage", "sync_state"];
+const TABLES = ["applications", "google_auth", "ignored_messages", "job_applications", "llm_usage", "review_items", "sync_state"];
 
 // The two roles PostgREST authenticates as. service_role is omitted on purpose.
 const PUBLIC_ROLES = ["anon", "authenticated"];

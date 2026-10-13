@@ -8,7 +8,7 @@ import { CATEGORIES, CATEGORY_BADGE_CLASS, type Category } from "@/lib/categorie
 // body is fetched one message at a time from /api/applications/[id] on click, because
 // shipping all of it up front was 87% of the page payload (see LIST_COLUMNS in
 // page.tsx).
-export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "threadId" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
+export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "threadId" | "interviewRound" | "extractedAt" | "linkState" | "jobApplicationId" | "linkConfidence" | "linkEvidence" | "linkFlagged" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
 
 type Row = ApplicationListRow;
 type Tab = "All" | Category;
