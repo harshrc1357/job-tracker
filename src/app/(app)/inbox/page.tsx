@@ -117,6 +117,10 @@ export default async function DashboardPage() {
           <div className="num">{counts.Rejection}</div>
           <div className="label">Rejection</div>
         </div>
+        <div className="stat-card staffing">
+          <div className="num">{counts["Staffing/recruiter"]}</div>
+          <div className="label">Staffing/recruiter</div>
+        </div>
         <div className="stat-card verification">
           <div className="num">{counts.Verification}</div>
           <div className="label">Verification</div>

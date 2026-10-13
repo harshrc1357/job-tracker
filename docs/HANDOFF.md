@@ -21,7 +21,8 @@ Built and tested without any secrets (run `npm test`; PGlite runs real SQL in-pr
 
 ## Known gaps
 
-- No "Screening" email category yet, so the Screening filter and stage stay empty until the classifier emits it.
-- Cold recruiter outreach is skipped by the classifier ("not about an application he made"), so it never reaches Review.
+- Mail the classifier skipped before the Screening and Staffing/recruiter categories existed is recorded in `ignored_messages` and is never fetched again. To recover recruiter mail from the last 60 days, you can delete those rows and let the sync re-read them, for example `delete from ignored_messages where created_at > now() - interval '60 days';`. Every deleted row costs one more LLM call and the sync is capped at 80 calls a run and 1,000 a day per model, so check the row count first. This is optional and not done for you.
+- The Gmail search (`buildJobQuery`) now also matches `recruiter`, `"phone screen"`, `"screening call"`, `"intro call"` and `"job description"`. That fetches more mail, so expect more LLM calls per run than before.
+- In-house recruiter cold outreach is classified as Screening, so it also sends Telegram messages. Confirm that is what you want once real mail comes through.
 - The UI keeps the app's existing light theme; the mockups were dark. Colours are CSS variables in `globals.css`.
 - Linking is not yet exercised against production data volumes. Watch Review and flagged links after the first run.

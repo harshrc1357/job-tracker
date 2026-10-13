@@ -166,6 +166,74 @@ describe("linkPendingEmails", () => {
     expect(email).toMatchObject({ linkState: "linked", linkFlagged: true });
   });
 
+  describe("Staffing/recruiter job descriptions", () => {
+    const jd = (over: Partial<typeof applications.$inferInsert> = {}) =>
+      addEmail({ category: "Staffing/recruiter", company: "Apex Systems", role: "Data Engineer", threadId: "apex-1", ...over });
+    const emailRow = async (id: number) => (await db.select().from(applications).where(eq(applications.id, id)))[0];
+
+    test("is kept but never makes an Application or a Review item", async () => {
+      const e = await jd();
+      const summary = await linkPendingEmails(db as never, { ownerEmail: null });
+      expect(summary).toMatchObject({ ignored: 1, created: 0, review: 0 });
+      expect(await emailRow(e.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+      expect(await db.select().from(jobApplications)).toHaveLength(0);
+      expect(await db.select().from(reviewItems)).toHaveLength(0);
+    });
+
+    test("when the thread later becomes a Screening, the Application is created under the agency and adopts it", async () => {
+      const first = await jd();
+      await linkPendingEmails(db as never, { ownerEmail: null });
+
+      await addEmail({ category: "Screening", company: "Apex Systems", role: "Data Engineer", threadId: "apex-1" });
+      await linkPendingEmails(db as never, { ownerEmail: null });
+
+      const apps = await db.select().from(jobApplications);
+      expect(apps).toHaveLength(1);
+      expect(apps[0]).toMatchObject({ employer: "Apex Systems", stage: "Screening" });
+      expect(await emailRow(first.id)).toMatchObject({ linkState: "linked", jobApplicationId: apps[0].id });
+      // Adopting is not a decision that needs a second look.
+      expect(await db.select().from(reviewItems)).toHaveLength(0);
+    });
+
+    test("adopts in the same run too, and a second run changes nothing", async () => {
+      const first = await jd();
+      await addEmail({ category: "Interview", company: "Apex Systems", role: "Data Engineer", threadId: "apex-1" });
+      await linkPendingEmails(db as never, { ownerEmail: null });
+      const [app] = await db.select().from(jobApplications);
+      expect(await emailRow(first.id)).toMatchObject({ linkState: "linked", jobApplicationId: app.id });
+
+      const before = await db.select().from(applications);
+      expect(await linkPendingEmails(db as never, { ownerEmail: null })).toMatchObject({ processed: 0 });
+      expect(await db.select().from(applications)).toEqual(before);
+    });
+
+    test("a job description in a thread that never converts stays unlinked", async () => {
+      const lone = await jd({ threadId: "apex-lonely" });
+      await addEmail({ category: "Screening", company: "Apex Systems", role: "Data Engineer", threadId: "apex-other" });
+      await linkPendingEmails(db as never, { ownerEmail: null });
+      expect(await emailRow(lone.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    });
+
+    test("one that arrives after its thread became an Application joins it without moving the stage", async () => {
+      await addEmail({ category: "Screening", company: "Apex Systems", role: "Data Engineer", threadId: "apex-1" });
+      await linkPendingEmails(db as never, { ownerEmail: null });
+      const later = await jd();
+      await linkPendingEmails(db as never, { ownerEmail: null });
+      const [app] = await db.select().from(jobApplications);
+      expect(await emailRow(later.id)).toMatchObject({ linkState: "linked", jobApplicationId: app.id });
+      expect(app.stage).toBe("Screening");
+    });
+
+    test("the client writing later from its own name is a separate Application, for the owner to Merge", async () => {
+      const first = await jd();
+      await addEmail({ category: "Screening", company: "Cotiviti", role: "Data Engineer", threadId: "cotiviti-1" });
+      await linkPendingEmails(db as never, { ownerEmail: null });
+      const apps = await db.select().from(jobApplications);
+      expect(apps.map((a) => a.employer)).toEqual(["Cotiviti"]);
+      expect(await emailRow(first.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    });
+  });
+
   test("verification mail is marked ignored and never creates an application", async () => {
     await addEmail({ category: "Verification" });
     await linkPendingEmails(db as never, { ownerEmail: null });

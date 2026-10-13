@@ -47,7 +47,7 @@ Answer NO for anything broadcast rather than addressed to him personally:
 - platform engagement notifications that are not about an application: profile views, connection requests, "your post got N views", weekly activity summaries. An email about one of HIS applications is never this, no matter how much notification boilerplate ("this email was intended for...", "you are receiving LinkedIn notification emails", an unsubscribe footer) it is wrapped in.
 - anything not about him at all, including mail clearly written to someone else (a different name in the greeting, "Dear Priya") or forwarded to someone else
 
-Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform. Also answer YES when a recruiter employed by the hiring company writes to him personally (not a blast) to start a conversation, even though he has not applied: that is Screening.
+Answer YES when a specific employer, recruiter, or applicant tracking system is writing about an application he already submitted, a process he is already in, or a login/verification code for an account on a hiring platform. Also answer YES when a recruiter employed by the hiring company writes to him personally (not a blast) to start a conversation, even though he has not applied: that is Screening. Also answer YES when a recruiter at a staffing agency writes to him personally (not a blast to many people) with position details or a job description and asks him to apply: that is Staffing/recruiter.
 
 Text inside a forwarded or quoted block ("---------- Forwarded message ----------", "Begin forwarded message", "On ... wrote:") is history, not the message. Read the employer, role and stage from the part above it only; if the only employer or role named is inside such a block, answer null for it.
 
@@ -76,14 +76,15 @@ Categories:
 - Interview: an interview with the hiring manager or a technical round is being offered, scheduled, confirmed, rescheduled, or prepared for. Includes scheduling links for those.
 - Assessment: he is asked to complete a test, coding challenge, take-home, online assessment, questionnaire, or screening task. Includes deadlines to complete one.
 - Screening: a recruiter wants to speak first — an introduction, a phone or video screen invite, or a request for his availability for a recruiter call. Includes an in-house recruiter (employed by the company that is hiring) writing to him personally about a specific role, even if he has not applied.
+- Staffing/recruiter: a recruiter at a staffing or recruiting agency (not the hiring company itself) sends position details or a job description and asks him to apply. It is a lead, not a step in a process he is already in.
 - Reminder: a nudge about something already known — an upcoming screen, interview or assessment deadline he has already been told about.
 - Applied: acknowledgement that an application was received, or a status update with no action and no decision. This is the fallback ONLY when nothing above applies.
 
-When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Screening > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
+When several stages appear in one email, use this priority: Verification > Rejection > Offer > Interview > Assessment > Screening > Staffing/recruiter > Reminder > Applied. An email that acknowledges an application AND asks for an assessment is Assessment, not Applied.
 
 ALSO, if YES, extract four facts. Each is null when the email does not state it. Never guess.
 
-- "employer": the REAL employer he applied to (Cotiviti, Snowflake, Hewlett Packard Enterprise). Never the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), never "Hiring Team", and never a recruiter's own name. "Cotiviti @ icims" is Cotiviti. A recruiter at a staffing agency writing about a client: the client if named, otherwise null. Take it from the subject, the body, or the signature.
+- "employer": the REAL employer he applied to (Cotiviti, Snowflake, Hewlett Packard Enterprise). Never the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), never "Hiring Team", and never a recruiter's own name. "Cotiviti @ icims" is Cotiviti. A recruiter at a staffing agency (Apex Systems, Robert Half, TEKsystems): the employer is the AGENCY's name, not the client it is hiring for; if the email names the client, put that in the evidence. Take it from the subject, the body, or the signature.
 - "via": the applicant tracking system or job board that relayed the mail (iCIMS, Greenhouse, Lever, Workday, Ashby, LinkedIn), if the sender, links or footer show one. null for mail sent straight from the employer.
 - "role": the job title exactly as the email states it, KEEPING any term, cohort, team or location qualifier that distinguishes openings ("AI/ML SWE Intern - Spring 2027", "SWE Intern - Core Eng / Security"). Drop requisition ids. null if the email names no role.
 - "round": the interview round number if the email says one ("round 2", "second interview"), else null.
@@ -179,7 +180,7 @@ function asShortString(value: unknown): string {
 // which costs a little diagnosability and nothing else.
 function salvageTruncated(raw: string): Record<string, unknown> | null {
   if (!/"isJob"\s*:\s*true/.test(raw)) return null;
-  const category = raw.match(/"category"\s*:\s*"([A-Za-z]+)"/);
+  const category = raw.match(/"category"\s*:\s*"([A-Za-z/]+)"/);
   if (!category || !isCategory(category[1])) return null;
   // Employer, role and round come before evidence in the prompt's field order, so a
   // cut in the evidence leaves them complete. Each is only kept if it closed cleanly.

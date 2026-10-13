@@ -71,6 +71,35 @@ describe("decideLink: mail that never touches an application (scenarios 35, 36, 
   });
 });
 
+// A staffing agency's job description is a lead, not a step in a process he is in.
+describe("decideLink: Staffing/recruiter mail never makes an Application of its own", () => {
+  const jd = (over: Partial<EmailFacts> = {}) => mail({ kind: "staffing", employer: "Apex Systems", role: "Data Engineer", threadId: "t9", ...over });
+
+  test("a job description with no Application behind its thread is ignored, not created and not asked about", () => {
+    expect(decideLink(jd(), [])).toMatchObject({ action: "ignore" });
+  });
+
+  test("it is ignored even when an Application at the same employer and role exists, so nothing attaches by guess", () => {
+    const decision = decideLink(jd(), [app({ id: 5, employer: "Apex Systems", role: "Data Engineer" })]);
+    expect(decision.action).toBe("ignore");
+  });
+
+  test("it never reaches Review, even when its thread is claimed by two Applications", () => {
+    const apps = [app({ id: 1, threadIds: ["t9"] }), app({ id: 2, threadIds: ["t9"] })];
+    expect(decideLink(jd(), apps).action).toBe("ignore");
+  });
+
+  test("once its thread belongs to an Application it joins that Application's timeline", () => {
+    const decision = decideLink(jd(), [app({ id: 7, employer: "Apex Systems", threadIds: ["t9"] })]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 7, confidence: 1, flagged: false, reopen: false });
+  });
+
+  test("it does not reopen a rejected Application", () => {
+    const decision = decideLink(jd(), [app({ id: 7, rejected: true, threadIds: ["t9"] })]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 7, reopen: false });
+  });
+});
+
 describe("decideLink: employer + role on a new thread (scenarios 2, 3, 4, 5, 9, 10, 11, 12)", () => {
   const snowflake = (id: number, role: string) => app({ id, employer: "Snowflake", role });
 

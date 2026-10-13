@@ -30,8 +30,9 @@ export function buildJobQuery(days: number): string {
     '(application OR interview OR assessment OR offer OR "thank you for applying" OR ' +
     'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
     '"security code" OR "verify your email" OR "confirm your email" OR ' +
-    // A recruiter's intro or screen often never says "interview" or "application".
-    'recruiter OR "phone screen" OR "screening call" OR "intro call")'
+    // A recruiter's intro or screen often never says "interview" or "application", and a
+    // staffing agency's mail says "job description".
+    'recruiter OR "phone screen" OR "screening call" OR "intro call" OR "job description")'
   );
 }
 

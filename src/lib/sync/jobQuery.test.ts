@@ -19,4 +19,8 @@ describe("buildJobQuery", () => {
       expect(buildJobQuery(60)).toContain(term);
     },
   );
+
+  test('fetches a staffing agency\'s "job description", which often says neither application nor interview', () => {
+    expect(buildJobQuery(60)).toContain('"job description"');
+  });
 });

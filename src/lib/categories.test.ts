@@ -14,7 +14,9 @@ describe("what the owner gets a Telegram message about", () => {
     },
   );
 
-  test.each(["Applied", "Rejection", "Reminder", "Verification"])("%s is dashboard-only", (category) => {
+  // A staffing agency's job description is shown in the Inbox and nothing more, until the
+  // same thread turns into a Screening, Assessment or Interview.
+  test.each(["Applied", "Rejection", "Reminder", "Staffing/recruiter", "Verification"])("%s is dashboard-only", (category) => {
     expect(NOTIFY_ON_ARRIVAL).not.toContain(category);
     expect(REMINDER_CATEGORIES).not.toContain(category);
     expect(EXTRACT_DUE_DATE_FOR).not.toContain(category);

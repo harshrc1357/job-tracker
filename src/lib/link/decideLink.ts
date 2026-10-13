@@ -15,7 +15,7 @@ const DAY_MS = 86_400_000;
 
 // Mail that moves an application forward. If one arrives for a role we have no
 // application for, the Applied email probably never reached us, so we create the application.
-const PROGRESS_KINDS: readonly EmailKind[] = ["screening", "assessment", "interview", "offer"];
+export const PROGRESS_KINDS: readonly EmailKind[] =["screening", "assessment", "interview", "offer"];
 
 function strongConfidence(sim: number): number {
   return Math.min(0.99, 0.9 + ((sim - STRONG) / (1 - STRONG)) * 0.09);
@@ -49,7 +49,18 @@ export function decideLink(email: EmailFacts, apps: readonly OpenApplication[]):
   return decision;
 }
 
+// A staffing agency's job description is a lead, not a step in a process. It never creates,
+// asks or guesses: the only Application it can join is the one its Gmail thread already belongs
+// to. Joining the Application a later Screening/Assessment/Interview email creates is planLinks' job.
+function decideStaffing(email: EmailFacts, apps: readonly OpenApplication[]): Decision {
+  const owners = email.threadId ? apps.filter((a) => a.threadIds.includes(email.threadId!)) : [];
+  if (owners.length === 1) return attach(owners[0].id, 1, "Gmail thread already belongs to this application");
+  return { action: "ignore", evidence: owners.length > 1 ? "job description in a thread several applications claim; left alone" : "job description from a staffing agency; kept in the Inbox only" };
+}
+
 function decideNonTrivial(email: EmailFacts, apps: readonly OpenApplication[]): Decision {
+  if (email.kind === "staffing") return decideStaffing(email, apps);
+
   const byThread = email.threadId ? apps.filter((a) => a.threadIds.includes(email.threadId!)) : [];
   if (byThread.length > 1) {
     return ask(0.3, byThread.map((a) => ({ applicationId: a.id, score: 1 })), "thread is claimed by several applications");

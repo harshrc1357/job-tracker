@@ -92,6 +92,16 @@ describe("parseVerdict", () => {
     ).toThrow(/unknown category/);
   });
 
+  test("reads a Staffing/recruiter verdict, whole or cut off by max_tokens", () => {
+    // The slash in the label is the thing that can go wrong: the rescue for a cut-off
+    // answer matches the category with a pattern, and a pattern of letters stops at it.
+    const whole = '{"isJob": true, "category": "Staffing/recruiter", "employer": "Apex Systems", "role": "Data Engineer", "evidence": "my client is hiring"}';
+    expect(parseVerdict(whole, "m")).toMatchObject({ isJob: true, category: "Staffing/recruiter", employer: "Apex Systems" });
+
+    const cut = '{"isJob": true, "category": "Staffing/recruiter", "employer": "Apex Systems", "evidence": "my client is hir';
+    expect(parseVerdict(cut, "m")).toMatchObject({ category: "Staffing/recruiter", employer: "Apex Systems" });
+  });
+
   test("reads a Screening verdict, whole or cut off by max_tokens", () => {
     const whole = '{"isJob": true, "category": "Screening", "employer": "Cotiviti", "role": "Data Scientist I", "evidence": "quick intro call"}';
     expect(parseVerdict(whole, "m")).toMatchObject({ isJob: true, category: "Screening", employer: "Cotiviti" });
@@ -150,7 +160,7 @@ describe("CLASSIFIER_SYSTEM_PROMPT", () => {
 
   test("states the stage priority that makes an acknowledgement-plus-test an Assessment", () => {
     expect(CLASSIFIER_SYSTEM_PROMPT).toContain(
-      "Verification > Rejection > Offer > Interview > Assessment > Screening > Reminder > Applied"
+      "Verification > Rejection > Offer > Interview > Assessment > Screening > Staffing/recruiter > Reminder > Applied"
     );
   });
 });
@@ -179,6 +189,29 @@ describe("CLASSIFIER_SYSTEM_PROMPT: Screening", () => {
     expect(CLASSIFIER_SYSTEM_PROMPT).not.toContain("recruiter prospecting where he has NOT already applied");
     // Mass mail to many people is still not his process.
     expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/sent to many people|mass/i);
+  });
+});
+
+describe("CLASSIFIER_SYSTEM_PROMPT: Staffing/recruiter", () => {
+  const line = (label: string) => CLASSIFIER_SYSTEM_PROMPT.split("\n").find((l) => l.startsWith(`- ${label}:`)) ?? "";
+
+  test("defines Staffing/recruiter as an agency recruiter sending a job description and asking him to apply", () => {
+    const staffing = line("Staffing/recruiter");
+    expect(staffing).toMatch(/agency/i);
+    expect(staffing).toMatch(/job description|position details/i);
+    expect(staffing).toMatch(/apply/i);
+  });
+
+  test("stores such mail instead of dropping it as an invitation to apply", () => {
+    // The NO list drops "invitations to apply"; the agency case has to be carved out of it.
+    expect(CLASSIFIER_SYSTEM_PROMPT).toMatch(/staffing agency[^.]*personally[^.]*Staffing\/recruiter/i);
+  });
+
+  test("makes the agency the employer and keeps the client in the evidence", () => {
+    const employerRule = CLASSIFIER_SYSTEM_PROMPT.split("\n").find((l) => l.startsWith('- "employer":')) ?? "";
+    expect(employerRule).toMatch(/agency/i);
+    expect(employerRule).toMatch(/evidence/i);
+    expect(CLASSIFIER_SYSTEM_PROMPT).not.toContain("the client if named, otherwise null");
   });
 });
 

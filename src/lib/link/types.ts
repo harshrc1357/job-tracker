@@ -19,6 +19,8 @@ export type EmailKind =
   | "rejection"
   | "reminder"
   | "outreach"
+  // A staffing agency's job description. Stored and shown, never an Application by itself.
+  | "staffing"
   | "verification"
   | "marketing";
 
@@ -32,6 +34,7 @@ export const KIND_BY_CATEGORY: Record<Category, EmailKind> = {
   Offer: "offer",
   Rejection: "rejection",
   Reminder: "reminder",
+  "Staffing/recruiter": "staffing",
   Verification: "verification",
 };
 

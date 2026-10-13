@@ -2,7 +2,7 @@
 // a database. The DB adapter (store.ts) applies the plan; keeping the two apart is what
 // lets "30 applications in one run" and "same mail twice" be tested without a network.
 
-import { decideLink } from "./decideLink";
+import { PROGRESS_KINDS, decideLink } from "./decideLink";
 import { nextState } from "./nextState";
 import type { ApplicationState, Candidate, EmailFacts, OpenApplication } from "./types";
 
@@ -15,6 +15,10 @@ export type TrackedApplication = Omit<OpenApplication, "threadIds"> & {
 };
 
 export type LinkableEmail = EmailFacts & { emailId: number };
+
+// A staffing agency's job description stored earlier and left unlinked, waiting for its
+// Gmail thread to turn into an Application.
+export type WaitingJobDescription = { emailId: number; threadId: string; receivedAt: Date };
 
 export type LinkResult = {
   emailId: number;
@@ -45,11 +49,40 @@ const stateOf = (a: TrackedApplication): ApplicationState => ({
 const later = (a: Date, b: Date) => (a.getTime() >= b.getTime() ? a : b);
 const earlier = (a: Date, b: Date) => (a.getTime() <= b.getTime() ? a : b);
 
-export function planLinks(emails: readonly LinkableEmail[], existing: readonly TrackedApplication[]): LinkPlan {
+export function planLinks(
+  emails: readonly LinkableEmail[],
+  existing: readonly TrackedApplication[],
+  waitingJobDescriptions: readonly WaitingJobDescription[] = [],
+): LinkPlan {
   const apps: TrackedApplication[] = existing.map((a) => ({ ...a, threadIds: [...a.threadIds], flags: [...a.flags] }));
   const results: LinkResult[] = [];
   const touched = new Set<number>();
   let nextTempId = -1;
+
+  // Job descriptions by Gmail thread. `at` is the index of an ignored result in this plan
+  // that has to be rewritten; stored ones have none and get a new result instead.
+  type Waiting = { emailId: number; receivedAt: Date; at?: number };
+  const waiting = new Map<string, Waiting[]>();
+  const wait = (threadId: string, item: Waiting) => waiting.set(threadId, [...(waiting.get(threadId) ?? []), item]);
+  for (const jd of waitingJobDescriptions) wait(jd.threadId, { emailId: jd.emailId, receivedAt: jd.receivedAt });
+
+  // The thread has become an Application, so the job descriptions sent earlier in it belong
+  // on its timeline. Adopting changes neither the stage nor the last-activity date.
+  const adopt = (email: LinkableEmail, app: TrackedApplication) => {
+    if (email.fromMe || !email.threadId || !PROGRESS_KINDS.includes(email.kind)) return;
+    for (const jd of waiting.get(email.threadId) ?? []) {
+      const result: LinkResult = {
+        emailId: jd.emailId, outcome: "attached", applicationId: app.id, confidence: 1, flagged: false,
+        evidence: "job description sent earlier in the same Gmail thread", candidates: [],
+      };
+      if (jd.at === undefined) results.push(result);
+      else results[jd.at] = result;
+      app.firstSeenAt = earlier(app.firstSeenAt, jd.receivedAt);
+      app.lastActivityAt = later(app.lastActivityAt, jd.receivedAt);
+    }
+    waiting.delete(email.threadId);
+    touched.add(app.id);
+  };
 
   // Time order is part of the contract. Whether a later email counts as a duplicate,
   // a reopen or a new application depends on what had already happened by then.
@@ -60,6 +93,7 @@ export function planLinks(emails: readonly LinkableEmail[], existing: readonly T
     const base = { emailId: email.emailId, candidates: [] as Candidate[] };
 
     if (decision.action === "ignore") {
+      if (email.kind === "staffing" && email.threadId) wait(email.threadId, { emailId: email.emailId, receivedAt: email.receivedAt, at: results.length });
       results.push({ ...base, outcome: "ignored", applicationId: null, confidence: 0, flagged: false, evidence: decision.evidence });
       continue;
     }
@@ -88,6 +122,7 @@ export function planLinks(emails: readonly LinkableEmail[], existing: readonly T
       apps.push(created);
       touched.add(created.id);
       results.push({ ...base, outcome: "created", applicationId: created.id, confidence: decision.confidence, flagged: decision.flagged, evidence: decision.evidence });
+      adopt(email, created);
       continue;
     }
 
@@ -108,6 +143,7 @@ export function planLinks(emails: readonly LinkableEmail[], existing: readonly T
     app.lastActivityAt = later(app.lastActivityAt, email.receivedAt);
     touched.add(app.id);
     results.push({ ...base, outcome: "attached", applicationId: app.id, confidence: decision.confidence, flagged: decision.flagged, evidence: decision.evidence });
+    adopt(email, app);
   }
 
   return { apps, results, touched };

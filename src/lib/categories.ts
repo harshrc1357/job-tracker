@@ -6,10 +6,14 @@ export const CATEGORIES = [
   "Offer",
   "Rejection",
   "Reminder",
+  "Staffing/recruiter",
   "Verification",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
+
+// The one category the Linker never turns into an Application by itself.
+export const STAFFING_CATEGORY: Category = "Staffing/recruiter";
 
 // Maps a category to its badge class in globals.css (mirrors the confirmed mockup).
 export const CATEGORY_BADGE_CLASS: Record<Category, string> = {
@@ -20,6 +24,8 @@ export const CATEGORY_BADGE_CLASS: Record<Category, string> = {
   Offer: "badge offer",
   Rejection: "badge rejection",
   Reminder: "badge reminder",
+  // The label has a slash, so the class is not derived from it.
+  "Staffing/recruiter": "badge staffing",
   Verification: "badge verification",
 };
 
