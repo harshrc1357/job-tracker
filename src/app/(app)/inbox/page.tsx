@@ -172,13 +172,14 @@ export default async function DashboardPage() {
 }
 
 function iconClass(category: Category): string {
-  if (category === "Interview") return "i";
+  if (category === "Interview" || category === "Screening") return "i";
   if (category === "Offer") return "o";
   return "a";
 }
 
 function icon(category: Category): string {
   if (category === "Interview") return "🎙️";
+  if (category === "Screening") return "📞";
   if (category === "Offer") return "🎉";
   return "📝";
 }

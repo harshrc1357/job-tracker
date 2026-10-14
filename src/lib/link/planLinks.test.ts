@@ -95,11 +95,9 @@ describe("planLinks: a job description joins the Application its thread later be
     expect(plan.results.find((r) => r.emailId === 902)).toBeUndefined();
   });
 
-  test("only mail that moves the process forward adopts: a reminder or a verification code does not", () => {
-    for (const kind of ["reminder", "verification", "applied"] as const) {
-      const plan = planLinks([email({ kind, employer: "Apex Systems", role: "Data Engineer", threadId: "t-apex", receivedAt: day(2) })], [], [{ emailId: 903, threadId: "t-apex", receivedAt: day(0) }]);
-      expect(plan.results.find((r) => r.emailId === 903)).toBeUndefined();
-    }
+  test.each(["reminder", "verification", "applied"] as const)("only mail that moves the process forward adopts: %s does not", (kind) => {
+    const plan = planLinks([email({ kind, employer: "Apex Systems", role: "Data Engineer", threadId: "t-apex", receivedAt: day(2) })], [], [{ emailId: 903, threadId: "t-apex", receivedAt: day(0) }]);
+    expect(plan.results.find((r) => r.emailId === 903)).toBeUndefined();
   });
 
   test("my own reply in the thread is not evidence that a process began", () => {
@@ -107,10 +105,18 @@ describe("planLinks: a job description joins the Application its thread later be
     expect(plan.results.find((r) => r.emailId === 904)).toBeUndefined();
   });
 
-  test("adopting changes neither the stage nor how recently the Application was active", () => {
-    const existing = tracked({ id: 4, employer: "Apex Systems", role: "Data Engineer", stage: "Interview", round: 1, threadIds: ["t-apex"], lastActivityAt: day(9) });
+  test("adopting an older job description leaves the stage and last activity alone; the Application now starts when it arrived", () => {
+    const existing = tracked({ id: 4, employer: "Apex Systems", role: "Data Engineer", stage: "Interview", round: 1, threadIds: ["t-apex"], firstSeenAt: day(3), lastActivityAt: day(9) });
     const plan = planLinks([screen({ kind: "assessment", receivedAt: day(5) })], [existing], [{ emailId: 905, threadId: "t-apex", receivedAt: day(0) }]);
-    expect(plan.apps[0]).toMatchObject({ stage: "Interview", lastActivityAt: day(9) });
+    expect(plan.apps[0]).toMatchObject({ stage: "Interview", lastActivityAt: day(9), firstSeenAt: day(0) });
+  });
+
+  test("a job description that arrives later in the thread joins it, leaves the stage alone, and counts as activity like any email", () => {
+    const existing = tracked({ id: 4, employer: "Apex Systems", role: "Data Engineer", stage: "Screening", threadIds: ["t-apex"], lastActivityAt: day(5) });
+    const later = jd({ receivedAt: day(12) });
+    const plan = planLinks([later], [existing]);
+    expect(byEmail(plan, later.emailId)).toMatchObject({ outcome: "attached", applicationId: 4 });
+    expect(plan.apps[0]).toMatchObject({ stage: "Screening", lastActivityAt: day(12) });
   });
 
   test("a second progress email in the thread does not adopt the same job description twice", () => {

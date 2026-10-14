@@ -9,18 +9,18 @@ describe("buildJobQuery", () => {
     expect(buildJobQuery(60)).toMatch(/^newer_than:60d /);
   });
 
-  test.each(["application", "interview", "assessment", "offer", "OTP"])("still fetches %s mail", (term) => {
+  test.each(["application", "interview", "assessment", "offer", "OTP"])("searches for %s", (term) => {
     expect(buildJobQuery(60)).toContain(term);
   });
 
   test.each(["recruiter", '"phone screen"', '"screening call"', '"intro call"'])(
-    "fetches recruiter screens and outreach, which say %s rather than interview",
+    "searches for %s, which recruiter screens and outreach say rather than interview",
     (term) => {
       expect(buildJobQuery(60)).toContain(term);
     },
   );
 
-  test('fetches a staffing agency\'s "job description", which often says neither application nor interview', () => {
+  test('searches for a staffing agency\'s "job description", which often says neither application nor interview', () => {
     expect(buildJobQuery(60)).toContain('"job description"');
   });
 });

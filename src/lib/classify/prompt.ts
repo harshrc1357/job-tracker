@@ -3,7 +3,7 @@
 // Kept apart from the call machinery so the wording — which is the actual product
 // here — can be read and tested on its own, with no network anywhere near it.
 
-import { CATEGORIES, isCategory, type Category } from "@/lib/categories";
+import { CATEGORIES, categoryFrom, type Category } from "@/lib/categories";
 import { LlmError } from "@/lib/llm/errors";
 import { isAtsName } from "@/lib/link/normalize";
 
@@ -121,8 +121,8 @@ export function parseVerdict(raw: string, model: string): Verdict {
     return { isJob: false, reason: asShortString(parsed.reason) || "not job related" };
   }
 
-  const category = typeof parsed.category === "string" ? parsed.category.trim() : "";
-  if (!isCategory(category)) {
+  const category = typeof parsed.category === "string" ? categoryFrom(parsed.category) : null;
+  if (!category) {
     throw new LlmError(`isJob=true with unknown category ${JSON.stringify(parsed.category)}`, {
       kind: "unusable",
       model,
@@ -180,15 +180,15 @@ function asShortString(value: unknown): string {
 // which costs a little diagnosability and nothing else.
 function salvageTruncated(raw: string): Record<string, unknown> | null {
   if (!/"isJob"\s*:\s*true/.test(raw)) return null;
-  const category = raw.match(/"category"\s*:\s*"([A-Za-z/]+)"/);
-  if (!category || !isCategory(category[1])) return null;
+  const category = categoryFrom(raw.match(/"category"\s*:\s*"([^"]+)"/)?.[1] ?? "");
+  if (!category) return null;
   // Employer, role and round come before evidence in the prompt's field order, so a
   // cut in the evidence leaves them complete. Each is only kept if it closed cleanly.
   const text = (key: string) => raw.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`))?.[1] ?? null;
   const round = raw.match(/"round"\s*:\s*(\d+)/);
   return {
     isJob: true,
-    category: category[1],
+    category,
     employer: text("employer"),
     via: text("via"),
     role: text("role"),

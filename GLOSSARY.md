@@ -4,9 +4,9 @@
 
 **Application** — stored in `job_applications`. One attempt to get one **Role** at one **Employer**, from the Applied email onward. The unit shown on Pipeline, Applications and Detail. An Application owns many Emails. _Avoid:_ "job", "card" (a card is only how Pipeline draws an Application).
 
-**Employer** — the real company hiring (Cotiviti), never the ATS or the sender. Identified by a canonical name plus an alias list (HPE = Hewlett Packard Enterprise). _Avoid:_ "company" when the sender could be meant.
+**Employer** — the real company hiring (Cotiviti), never the ATS and never a guess from the sender's name. One exception: mail from a staffing agency's recruiter (Apex Systems) has the agency as its Employer, because the client is not always named and is never matched to the agency. Identified by a canonical name plus an alias list (HPE = Hewlett Packard Enterprise). _Avoid:_ "company" when the sender could be meant.
 
-**Via** — the ATS or agency an Email travelled through (icims, greenhouse, a staffing firm). Metadata only; never decides the Employer.
+**Via** — the ATS or job board an Email travelled through (icims, greenhouse, LinkedIn). Metadata only; never decides the Employer.
 
 **Role** — the job title plus any term/cohort that distinguishes openings (Spring 2027 vs Summer 2026). Normalised for comparison.
 

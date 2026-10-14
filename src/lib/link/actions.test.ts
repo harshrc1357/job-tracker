@@ -170,6 +170,33 @@ describe("splitApplication", () => {
   });
 });
 
+describe("detaching an Application's Screening email", () => {
+  // The agency's job description joined the Application when the Screening mail arrived in
+  // its thread. Detaching moves the whole thread; a job description has nothing to ask the
+  // owner, so it goes back to the Inbox. Staffing/recruiter mail is never in Review.
+  async function apexThread() {
+    const jd = await addEmail({ category: "Staffing/recruiter", company: "Apex Systems", role: "Data Engineer", threadId: "ap-1", receivedAt: new Date(Date.UTC(2026, 8, 1, 9)) });
+    const screen = await addEmail({ category: "Screening", company: "Apex Systems", role: "Data Engineer", threadId: "ap-1", receivedAt: new Date(Date.UTC(2026, 8, 3, 9)) });
+    await link();
+    return { jd, screen };
+  }
+
+  test("sends the adopted job description back to the Inbox, not into Review", async () => {
+    const { jd, screen } = await apexThread();
+    expect((await emailRow(jd.id)).jobApplicationId).not.toBeNull();
+    await detachEmail(db as never, screen.id);
+    expect(await emailRow(jd.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    expect((await db.select().from(reviewItems)).map((i) => i.emailId)).toEqual([screen.id]);
+  });
+
+  test("detaching the job description itself never puts it in Review either", async () => {
+    const { jd } = await apexThread();
+    await detachEmail(db as never, jd.id);
+    expect(await emailRow(jd.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    expect((await db.select().from(reviewItems)).map((i) => i.emailId)).not.toContain(jd.id);
+  });
+});
+
 describe("mergeApplications", () => {
   test("moves every email into the target, removes the source, and keeps the earliest applied date", async () => {
     const first = await addEmail({ role: "Gen AI Intern", receivedAt: new Date("2026-09-01T00:00:00Z") });

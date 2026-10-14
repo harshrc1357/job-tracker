@@ -100,6 +100,27 @@ describe("decideLink: Staffing/recruiter mail never makes an Application of its 
   });
 });
 
+// The agency is the Employer, so every role it recruits for is one Employer to the Linker.
+// These pin what that costs: a role-less follow-up is a guess, and a guess is flagged or asked.
+describe("decideLink: an agency is one Employer for all of its roles (scenario 51)", () => {
+  const screen = (over: Partial<EmailFacts> = {}) => mail({ kind: "screening", employer: "Apex Systems", role: null, threadId: "t-new", ...over });
+  const apex = (id: number, role: string) => app({ id, employer: "Apex Systems", role });
+
+  test("a role-less Screening attaches, flagged, when exactly one Application is open at the agency", () => {
+    const decision = decideLink(screen(), [apex(3, "Data Engineer")]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 3, flagged: true });
+    if (decision.action === "attach") expect(decision.confidence).toBeLessThan(0.9);
+  });
+
+  test("with two open at the agency it asks instead of picking one", () => {
+    expect(decideLink(screen(), [apex(3, "Data Engineer"), apex(4, "BI Developer")]).action).toBe("ask");
+  });
+
+  test("a Screening that names a different role at the agency is a new Application", () => {
+    expect(decideLink(screen({ role: "BI Developer" }), [apex(3, "Data Engineer")]).action).toBe("create");
+  });
+});
+
 describe("decideLink: employer + role on a new thread (scenarios 2, 3, 4, 5, 9, 10, 11, 12)", () => {
   const snowflake = (id: number, role: string) => app({ id, employer: "Snowflake", role });
 

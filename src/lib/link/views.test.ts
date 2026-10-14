@@ -101,7 +101,7 @@ describe("Applications table and Ghosted 30d+", () => {
     expect(daysQuiet(row({ lastActivityAt: NOW }), NOW)).toBe(0);
   });
 
-  test("a new email clears it: ghosted is read from the last activity, never stored", () => {
+  test("a new email clears it: ghosted follows the last activity", () => {
     const quiet = row({ stage: "Interview", lastActivityAt: daysAgo(45) });
     expect(isGhosted(quiet, NOW)).toBe(true);
     expect(isGhosted({ ...quiet, lastActivityAt: NOW }, NOW)).toBe(false);

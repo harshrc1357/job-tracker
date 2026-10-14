@@ -48,6 +48,12 @@ export function isCategory(value: string): value is Category {
   return (CATEGORIES as readonly string[]).includes(value);
 }
 
+// Our label for a category a model wrote in any letter case, or null if it is not one of ours.
+export function categoryFrom(value: string): Category | null {
+  const wanted = value.trim().toLowerCase();
+  return CATEGORIES.find((c) => c.toLowerCase() === wanted) ?? null;
+}
+
 export function isReminderCategory(value: string): boolean {
   return REMINDER_CATEGORIES.includes(value as Category);
 }

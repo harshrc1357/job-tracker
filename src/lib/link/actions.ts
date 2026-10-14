@@ -5,7 +5,7 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, linkExamples, reviewItems } from "@/db/schema";
-import { isCategory } from "@/lib/categories";
+import { STAFFING_CATEGORY, isCategory } from "@/lib/categories";
 import { nextState } from "./nextState";
 import type { AppRow } from "./views";
 import { KIND_BY_CATEGORY, MANUAL_STAGE_FLAG, STAGES, type ApplicationState, type Stage } from "./types";
@@ -134,14 +134,19 @@ export async function detachEmail(db: Db, emailId: number): Promise<void> {
     const moving = await withThreadSiblings(tx, [emailId]);
     const rows = await tx.select().from(applications).where(inArray(applications.id, moving));
     for (const r of rows) {
+      // A job description has nothing to ask the owner: it goes back to the Inbox. Only
+      // other mail waits in Review for a new home.
+      const toReview = r.category !== STAFFING_CATEGORY;
       await tx
         .update(applications)
-        .set({ linkState: "review", jobApplicationId: null, linkConfidence: 0, linkEvidence: "detached by you", linkFlagged: false })
+        .set({ linkState: toReview ? "review" : "ignored", jobApplicationId: null, linkConfidence: 0, linkEvidence: "detached by you", linkFlagged: false })
         .where(eq(applications.id, r.id));
-      await tx
-        .insert(reviewItems)
-        .values({ emailId: r.id, confidence: 0, evidence: "detached by you", candidates: [] })
-        .onConflictDoUpdate({ target: reviewItems.emailId, set: { resolvedAt: null, evidence: "detached by you", confidence: 0, candidates: [] } });
+      if (toReview) {
+        await tx
+          .insert(reviewItems)
+          .values({ emailId: r.id, confidence: 0, evidence: "detached by you", candidates: [] })
+          .onConflictDoUpdate({ target: reviewItems.emailId, set: { resolvedAt: null, evidence: "detached by you", confidence: 0, candidates: [] } });
+      }
       await example(tx, { kind: "detach", emailId: r.id, fromApplicationId: fromApp, facts: factsOf(r) });
     }
     await rebuild(tx, fromApp);

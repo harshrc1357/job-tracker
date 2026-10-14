@@ -1,6 +1,6 @@
 import { REOPENING_KINDS } from "./nextState";
 import { isAtsName, normalizeEmployer, roleSimilarity } from "./normalize";
-import type { Candidate, Decision, EmailFacts, EmailKind, OpenApplication } from "./types";
+import { PROGRESS_KINDS, type Candidate, type Decision, type EmailFacts, type OpenApplication } from "./types";
 
 // A role match this close counts as the same role.
 const STRONG = 0.8;
@@ -13,9 +13,10 @@ const RIVAL_GAP = 0.15;
 const REAPPLY_WINDOW_DAYS = 90;
 const DAY_MS = 86_400_000;
 
-// Mail that moves an application forward. If one arrives for a role we have no
-// application for, the Applied email probably never reached us, so we create the application.
-export const PROGRESS_KINDS: readonly EmailKind[] =["screening", "assessment", "interview", "offer"];
+const THREAD_OWNED = "Gmail thread already belongs to this application";
+
+const ownersOfThread = (email: EmailFacts, apps: readonly OpenApplication[]) =>
+  email.threadId ? apps.filter((a) => a.threadIds.includes(email.threadId!)) : [];
 
 function strongConfidence(sim: number): number {
   return Math.min(0.99, 0.9 + ((sim - STRONG) / (1 - STRONG)) * 0.09);
@@ -53,15 +54,15 @@ export function decideLink(email: EmailFacts, apps: readonly OpenApplication[]):
 // asks or guesses: the only Application it can join is the one its Gmail thread already belongs
 // to. Joining the Application a later Screening/Assessment/Interview email creates is planLinks' job.
 function decideStaffing(email: EmailFacts, apps: readonly OpenApplication[]): Decision {
-  const owners = email.threadId ? apps.filter((a) => a.threadIds.includes(email.threadId!)) : [];
-  if (owners.length === 1) return attach(owners[0].id, 1, "Gmail thread already belongs to this application");
+  const owners = ownersOfThread(email, apps);
+  if (owners.length === 1) return attach(owners[0].id, 1, THREAD_OWNED);
   return { action: "ignore", evidence: owners.length > 1 ? "job description in a thread several applications claim; left alone" : "job description from a staffing agency; kept in the Inbox only" };
 }
 
 function decideNonTrivial(email: EmailFacts, apps: readonly OpenApplication[]): Decision {
   if (email.kind === "staffing") return decideStaffing(email, apps);
 
-  const byThread = email.threadId ? apps.filter((a) => a.threadIds.includes(email.threadId!)) : [];
+  const byThread = ownersOfThread(email, apps);
   if (byThread.length > 1) {
     return ask(0.3, byThread.map((a) => ({ applicationId: a.id, score: 1 })), "thread is claimed by several applications");
   }
@@ -70,7 +71,7 @@ function decideNonTrivial(email: EmailFacts, apps: readonly OpenApplication[]): 
     // Only mail that moves a process forward reopens a rejected application. A duplicate
     // Applied confirmation, a reminder or a second rejection say nothing new.
     const reopen = owner.rejected && REOPENING_KINDS.includes(email.kind);
-    return attach(owner.id, 1, reopen ? "thread belongs to a rejected application; new mail reopens it" : "Gmail thread already belongs to this application", { flagged: reopen, reopen });
+    return attach(owner.id, 1, reopen ? "thread belongs to a rejected application; new mail reopens it" : THREAD_OWNED, { flagged: reopen, reopen });
   }
 
   // ATS names are carriers, never employers (GLOSSARY: Via).

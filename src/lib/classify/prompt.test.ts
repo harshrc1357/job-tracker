@@ -92,6 +92,15 @@ describe("parseVerdict", () => {
     ).toThrow(/unknown category/);
   });
 
+  test("accepts a category written in another case and stores our label", () => {
+    // "Staffing/recruiter" is the one label a model is likely to capitalise differently.
+    // Rejecting it would waste a call on the other model for an answer that was right.
+    const wrongCase = '{"isJob": true, "category": "Staffing/Recruiter", "employer": "Apex Systems", "evidence": "x"}';
+    expect(parseVerdict(wrongCase, "m")).toMatchObject({ category: "Staffing/recruiter" });
+    const cut = '{"isJob": true, "category": "screening", "employer": "Magpie", "evidence": "can we find 20 min';
+    expect(parseVerdict(cut, "m")).toMatchObject({ category: "Screening", employer: "Magpie" });
+  });
+
   test("reads a Staffing/recruiter verdict, whole or cut off by max_tokens", () => {
     // The slash in the label is the thing that can go wrong: the rescue for a cut-off
     // answer matches the category with a pattern, and a pattern of letters stops at it.
@@ -210,7 +219,7 @@ describe("CLASSIFIER_SYSTEM_PROMPT: Staffing/recruiter", () => {
   test("makes the agency the employer and keeps the client in the evidence", () => {
     const employerRule = CLASSIFIER_SYSTEM_PROMPT.split("\n").find((l) => l.startsWith('- "employer":')) ?? "";
     expect(employerRule).toMatch(/agency/i);
-    expect(employerRule).toMatch(/evidence/i);
+    expect(employerRule).toMatch(/names the client[^.;]*put[^.;]*in the evidence/i);
     expect(CLASSIFIER_SYSTEM_PROMPT).not.toContain("the client if named, otherwise null");
   });
 });

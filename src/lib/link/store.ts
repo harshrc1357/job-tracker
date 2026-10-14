@@ -9,9 +9,8 @@ import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
 import { isCategory, STAFFING_CATEGORY } from "@/lib/categories";
-import { PROGRESS_KINDS } from "./decideLink";
 import { planLinks, type LinkableEmail, type TrackedApplication, type WaitingJobDescription } from "./planLinks";
-import { KIND_BY_CATEGORY, STAGES, type Stage } from "./types";
+import { KIND_BY_CATEGORY, STAGES, movesProcessForward, type Stage } from "./types";
 
 // Any drizzle Postgres database: postgres-js in production, PGlite in tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,7 +103,7 @@ export async function linkPendingEmails(
 
   // Job descriptions stored earlier wait, unlinked, for their thread to become an Application.
   // Only threads where something is moving forward in this batch can adopt them.
-  const forwardThreads = [...new Set(emails.filter((e) => !e.fromMe && PROGRESS_KINDS.includes(e.kind)).flatMap((e) => (e.threadId ? [e.threadId] : [])))];
+  const forwardThreads = [...new Set(emails.filter(movesProcessForward).flatMap((e) => (e.threadId ? [e.threadId] : [])))];
   const waiting: WaitingJobDescription[] = forwardThreads.length
     ? (
         await db

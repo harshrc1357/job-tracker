@@ -2,9 +2,9 @@
 // a database. The DB adapter (store.ts) applies the plan; keeping the two apart is what
 // lets "30 applications in one run" and "same mail twice" be tested without a network.
 
-import { PROGRESS_KINDS, decideLink } from "./decideLink";
+import { decideLink } from "./decideLink";
 import { nextState } from "./nextState";
-import type { ApplicationState, Candidate, EmailFacts, OpenApplication } from "./types";
+import { movesProcessForward, type ApplicationState, type Candidate, type EmailFacts, type OpenApplication } from "./types";
 
 export type TrackedApplication = Omit<OpenApplication, "threadIds"> & {
   threadIds: string[];
@@ -59,28 +59,29 @@ export function planLinks(
   const touched = new Set<number>();
   let nextTempId = -1;
 
-  // Job descriptions by Gmail thread. `at` is the index of an ignored result in this plan
-  // that has to be rewritten; stored ones have none and get a new result instead.
-  type Waiting = { emailId: number; receivedAt: Date; at?: number };
-  const waiting = new Map<string, Waiting[]>();
-  const wait = (threadId: string, item: Waiting) => waiting.set(threadId, [...(waiting.get(threadId) ?? []), item]);
-  for (const jd of waitingJobDescriptions) wait(jd.threadId, { emailId: jd.emailId, receivedAt: jd.receivedAt });
+  // Job descriptions by Gmail thread. `resultIndex` is the place of an ignored result in this
+  // plan that has to be rewritten; stored ones have none and get a new result instead.
+  type HeldJobDescription = Omit<WaitingJobDescription, "threadId"> & { resultIndex?: number };
+  const held = new Map<string, HeldJobDescription[]>();
+  const hold = (threadId: string, jd: HeldJobDescription) => held.set(threadId, [...(held.get(threadId) ?? []), jd]);
+  for (const { threadId, ...jd } of waitingJobDescriptions) hold(threadId, jd);
 
   // The thread has become an Application, so the job descriptions sent earlier in it belong
-  // on its timeline. Adopting changes neither the stage nor the last-activity date.
+  // on its timeline. They never change the stage. The Application now starts when the first
+  // one arrived, and last activity stays the newest email, as for any email.
   const adopt = (email: LinkableEmail, app: TrackedApplication) => {
-    if (email.fromMe || !email.threadId || !PROGRESS_KINDS.includes(email.kind)) return;
-    for (const jd of waiting.get(email.threadId) ?? []) {
+    if (!email.threadId || !movesProcessForward(email)) return;
+    for (const jd of held.get(email.threadId) ?? []) {
       const result: LinkResult = {
         emailId: jd.emailId, outcome: "attached", applicationId: app.id, confidence: 1, flagged: false,
         evidence: "job description sent earlier in the same Gmail thread", candidates: [],
       };
-      if (jd.at === undefined) results.push(result);
-      else results[jd.at] = result;
+      if (jd.resultIndex === undefined) results.push(result);
+      else results[jd.resultIndex] = result;
       app.firstSeenAt = earlier(app.firstSeenAt, jd.receivedAt);
       app.lastActivityAt = later(app.lastActivityAt, jd.receivedAt);
     }
-    waiting.delete(email.threadId);
+    held.delete(email.threadId);
     touched.add(app.id);
   };
 
@@ -93,7 +94,7 @@ export function planLinks(
     const base = { emailId: email.emailId, candidates: [] as Candidate[] };
 
     if (decision.action === "ignore") {
-      if (email.kind === "staffing" && email.threadId) wait(email.threadId, { emailId: email.emailId, receivedAt: email.receivedAt, at: results.length });
+      if (email.kind === "staffing" && email.threadId) hold(email.threadId, { emailId: email.emailId, receivedAt: email.receivedAt, resultIndex: results.length });
       results.push({ ...base, outcome: "ignored", applicationId: null, confidence: 0, flagged: false, evidence: decision.evidence });
       continue;
     }

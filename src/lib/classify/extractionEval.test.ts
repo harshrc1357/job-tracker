@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { scoreExtraction, type EvalRow } from "./extractionEval";
+import { categoryShifts, scoreExtraction, type EvalRow } from "./extractionEval";
 
 const row = (over: Partial<EvalRow> = {}): EvalRow => ({
   id: 1,
@@ -51,5 +51,29 @@ describe("scoreExtraction", () => {
 
   test("an empty set does not divide by zero", () => {
     expect(scoreExtraction([])).toMatchObject({ labelled: 0, employer: 0, role: 0, round: 0 });
+  });
+});
+
+describe("categoryShifts", () => {
+  const moved = (id: number, stored: string, predicted: string) => ({ id, category: { stored, predicted } });
+
+  test("lists the emails whose category would change, grouped by from and to, biggest group first", () => {
+    const shifts = categoryShifts([
+      moved(1, "Interview", "Screening"),
+      moved(2, "Reminder", "Staffing/recruiter"),
+      moved(3, "Interview", "Screening"),
+    ]);
+    expect(shifts).toEqual([
+      { from: "Interview", to: "Screening", ids: [1, 3] },
+      { from: "Reminder", to: "Staffing/recruiter", ids: [2] },
+    ]);
+  });
+
+  test("an email that keeps its category is not a shift", () => {
+    expect(categoryShifts([moved(1, "Interview", "Interview")])).toEqual([]);
+  });
+
+  test("a row from an older eval file, with no category recorded, is left out", () => {
+    expect(categoryShifts([{ id: 1 }, moved(2, "Applied", "Screening")])).toEqual([{ from: "Applied", to: "Screening", ids: [2] }]);
   });
 });
