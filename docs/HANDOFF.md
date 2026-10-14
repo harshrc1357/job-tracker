@@ -166,7 +166,7 @@ The new recruiter cases were written from the prompt's rules and have never run 
 
 **Gate.** Continue if employer and role look trustworthy and there are no patterns in the bad column. If there is a pattern, stop and give Claude Code the printed `--score` output (ids and counts only, never the file) and ask it to adjust the prompt test-first.
 
-One decision to look out for here is in section 8 (an agency job description that also asks for your availability becomes Screening).
+One decision to look out for here is in section 7 (an agency job description that also asks for your availability becomes Screening).
 
 ### Step 5. Quietly store mail the wider Gmail search now finds
 
@@ -228,6 +228,7 @@ Vercel → the project → Settings → Environment Variables:
 1. Open [PR #17](https://github.com/harshrc1357/job-tracker/pull/17). Check the Vercel preview check is green. Merge with **Create a merge commit** (it keeps one commit per ticket). Keep the branch.
 2. Open [PR #11](https://github.com/harshrc1357/job-tracker/pull/11). It now includes #17's commits. Wait for the Vercel check on the newest commit. **Only now merge it** (merge commit). This deploys.
 3. Delete both branches (GitHub offers the button after each merge).
+4. Update your copy: `git switch main`, `git pull`.
 
 ### Step 10. Watch the first syncs
 
@@ -315,7 +316,6 @@ Remove `LLM_CALLS_PER_DAY` from `.env` whenever you see it there.
 
 - Answering a Review item with "new application" does not pull in earlier job descriptions of that thread; they stay in the Inbox. Only the normal Linker adopts them.
 - A Screening from an agency that names no role attaches (flagged) to the only open Application at that agency, since the agency is one Employer for all its roles (scenario 51). With two open it goes to Review.
-- A resent Applied confirmation (scenario 33) is documented but its duplicate handling is not built.
 - The live sync lists at most 500 matching messages per run and does not page; a long catch-up goes through `npm run backfill`.
 - `scripts/reclassify.mts` predates this work and rewrites stored categories in place. Do not run it on linked data without a dry run and a backup.
 - Linking has not been exercised at production volume. Watch Review and flagged links for the first week.
