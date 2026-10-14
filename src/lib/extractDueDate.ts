@@ -2,7 +2,7 @@ import { complete } from "./llm/complete";
 import { parseDueDate } from "./parseDueDate";
 import { OWNER_TIME_ZONE } from "./constants";
 
-// For Interview/Assessment/Offer emails, try to pull out a concrete date/time so the
+// For Screening/Interview/Assessment/Offer emails, try to pull out a concrete date/time so the
 // sync job can send "coming up" reminders closer to the actual event, instead of only
 // pinging once when the email first arrives.
 //
@@ -28,7 +28,7 @@ export async function extractDueDate(
   referenceDate: Date
 ): Promise<Date | null> {
   const system = [
-    "Extract the specific date and time of an interview, assessment deadline, or offer deadline mentioned in this email.",
+    "Extract the specific date and time of a recruiter screening call, interview, assessment deadline, or offer deadline mentioned in this email.",
     `The email was received on ${referenceDate.toISOString()} — use that to resolve relative dates like "tomorrow" or "next Friday".`,
     `Give the time as local wall-clock time in ${OWNER_TIME_ZONE}. Do not append a timezone offset or a Z.`,
     'Reply with only an ISO 8601 datetime such as 2026-08-27T14:00:00, or "None" if no specific date or time is stated.',

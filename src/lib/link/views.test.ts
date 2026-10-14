@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applicationCounts, filterApplications, isGhosted, pipelineApps, pipelineCounts, type AppRow } from "./views";
+import { applicationCounts, daysQuiet, filterApplications, isGhosted, pipelineApps, pipelineCounts, type AppRow } from "./views";
 
 const NOW = new Date("2026-10-13T12:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
@@ -75,11 +75,36 @@ describe("Pipeline: a card only once it moves past Applied", () => {
 });
 
 describe("Applications table and Ghosted 30d+", () => {
-  test("ghosted means Applied-only, still open, and silent for 30 days or more", () => {
+  test("ghosted means still open and silent for 30 days or more", () => {
     expect(isGhosted(row({ lastActivityAt: daysAgo(30) }), NOW)).toBe(true);
     expect(isGhosted(row({ lastActivityAt: daysAgo(29) }), NOW)).toBe(false);
-    expect(isGhosted(row({ lastActivityAt: daysAgo(90), stage: "Interview" }), NOW)).toBe(false);
     expect(isGhosted(row({ lastActivityAt: daysAgo(90), rejected: true }), NOW)).toBe(false);
+  });
+
+  test.each(["Applied", "Screening", "Assessment", "Interview", "Offer"] as const)(
+    "an open %s application that went quiet is ghosted, whatever stage it reached",
+    (stage) => {
+      expect(isGhosted(row({ stage, lastActivityAt: daysAgo(31) }), NOW)).toBe(true);
+      expect(isGhosted(row({ stage, lastActivityAt: daysAgo(5) }), NOW)).toBe(false);
+    },
+  );
+
+  test("a rejected application is never ghosted, at any stage", () => {
+    for (const stage of ["Applied", "Interview", "Offer"] as const) {
+      expect(isGhosted(row({ stage, rejected: true, lastActivityAt: daysAgo(200) }), NOW)).toBe(false);
+    }
+  });
+
+  test("daysQuiet counts whole days since the last email, for the Ghosted badge", () => {
+    expect(daysQuiet(row({ lastActivityAt: daysAgo(45) }), NOW)).toBe(45);
+    expect(daysQuiet(row({ lastActivityAt: new Date(NOW.getTime() - 45.9 * 86_400_000) }), NOW)).toBe(45);
+    expect(daysQuiet(row({ lastActivityAt: NOW }), NOW)).toBe(0);
+  });
+
+  test("a new email clears it: ghosted follows the last activity", () => {
+    const quiet = row({ stage: "Interview", lastActivityAt: daysAgo(45) });
+    expect(isGhosted(quiet, NOW)).toBe(true);
+    expect(isGhosted({ ...quiet, lastActivityAt: NOW }, NOW)).toBe(false);
   });
 
   const apps = [
@@ -97,6 +122,21 @@ describe("Applications table and Ghosted 30d+", () => {
     expect(filterApplications(apps, "progressed", NOW)).toHaveLength(1);
     expect(filterApplications(apps, "rejected", NOW)).toHaveLength(1);
     expect(filterApplications(apps, "ghosted", NOW)).toHaveLength(1);
+  });
+
+  test("the Ghosted filter and its count include applications that got past Applied", () => {
+    const quiet = row({ stage: "Interview", lastActivityAt: daysAgo(60) });
+    const live = row({ stage: "Interview", lastActivityAt: daysAgo(2) });
+    const mixed = [...apps, quiet, live];
+    expect(filterApplications(mixed, "ghosted", NOW).map((a) => a.id).sort()).toEqual(
+      [apps[0].id, quiet.id].sort(),
+    );
+    expect(applicationCounts(mixed, NOW).ghosted).toBe(2);
+  });
+
+  test("a ghosted application stays on the Pipeline, where the card shows it", () => {
+    const quiet = row({ stage: "Assessment", lastActivityAt: daysAgo(60) });
+    expect(pipelineApps([quiet], "active").map((a) => a.id)).toEqual([quiet.id]);
   });
 
   test("an employer filter is case-insensitive and exact on the employer", () => {

@@ -30,8 +30,13 @@ export type ApplicationFilter = (typeof APPLICATION_FILTERS)[number];
 
 export const isProgressed = (a: AppRow) => a.stage !== "Applied";
 
+// Whole days since the last email on this application.
+export const daysQuiet = (a: AppRow, now: Date) => Math.floor((now.getTime() - a.lastActivityAt.getTime()) / DAY_MS);
+
+// Any open application, at any stage, with no email for 30 days. Derived from the last
+// activity on every read and never stored, so a late email clears it by itself.
 export function isGhosted(a: AppRow, now: Date): boolean {
-  return !isProgressed(a) && !a.rejected && now.getTime() - a.lastActivityAt.getTime() >= GHOSTED_AFTER_DAYS * DAY_MS;
+  return !a.rejected && daysQuiet(a, now) >= GHOSTED_AFTER_DAYS;
 }
 
 const byRecent = (a: AppRow, b: AppRow) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime();

@@ -28,6 +28,7 @@ loadEnv();
 const { db } = await import("../src/db/client");
 const { applications, ignoredMessages } = await import("../src/db/schema");
 const { classifyEmail } = await import("../src/lib/classify");
+const { isReminderCategory } = await import("../src/lib/categories");
 const { extractDueDate } = await import("../src/lib/extractDueDate");
 const { EXTRACT_DUE_DATE_FOR } = await import("../src/lib/categories");
 const { setQuota } = await import("../src/lib/llm/runtime");
@@ -142,7 +143,7 @@ function report(changes: Change[]) {
   // The rows worth eyeballing: an email that was Applied and is really an Assessment
   // or an Interview is a deadline that was silently missed.
   const promoted = recategorised.filter(
-    (c) => c.kind === "recategorised" && ["Assessment", "Interview", "Offer"].includes(c.to)
+    (c) => c.kind === "recategorised" && isReminderCategory(c.to)
   );
   if (promoted.length > 0) {
     console.log(`\nmissed actionable mail (${promoted.length}):`);

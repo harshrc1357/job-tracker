@@ -6,7 +6,9 @@
 import { normalizeEmployer, roleSimilarity } from "@/lib/link/normalize";
 
 export type Facts = { employer: string | null; role: string | null; round: number | null };
-export type EvalRow = { id: number; predicted: Facts; expected: Facts | null };
+// category is the stored one next to what the classifier says now. Absent in files written
+// before the eval recorded it.
+export type EvalRow = { id: number; predicted: Facts; expected: Facts | null; category?: { stored: string; predicted: string } };
 export type Field = "employer" | "role" | "round";
 
 export type Score = {
@@ -55,4 +57,21 @@ export function scoreExtraction(rows: readonly EvalRow[]): Score {
     invented,
     wrong,
   };
+}
+
+export type CategoryShift = { from: string; to: string; ids: number[] };
+
+// Emails whose category the current classifier would change, grouped by from -> to with the
+// biggest group first. Needs no hand labels: the owner reads the few rows that moved,
+// which is how a new category (Screening, Staffing/recruiter) is judged on real mail.
+export function categoryShifts(rows: readonly Pick<EvalRow, "id" | "category">[]): CategoryShift[] {
+  const groups = new Map<string, CategoryShift>();
+  for (const { id, category } of rows) {
+    if (!category || category.stored === category.predicted) continue;
+    const key = `${category.stored}\u0000${category.predicted}`;
+    const group = groups.get(key) ?? { from: category.stored, to: category.predicted, ids: [] };
+    group.ids.push(id);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((a, b) => b.ids.length - a.ids.length);
 }

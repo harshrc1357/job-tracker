@@ -72,7 +72,7 @@ export default async function DashboardPage() {
   }
 
   // "Upcoming" means due within the reminder window (see REMINDER_WINDOW_HOURS) and
-  // in a category the bot actually nudges about (Interview, Assessment, Offer) —
+  // in a category the bot actually nudges about (Screening, Interview, Assessment, Offer) —
   // mirrors the sync cron's own second pass exactly, so the dashboard never shows
   // something as upcoming that the bot wouldn't also be about to ping about.
   const now = Date.now();
@@ -97,6 +97,10 @@ export default async function DashboardPage() {
           <div className="num">{counts.Applied}</div>
           <div className="label">Applied</div>
         </div>
+        <div className="stat-card screening">
+          <div className="num">{counts.Screening}</div>
+          <div className="label">Screening</div>
+        </div>
         <div className="stat-card assessment">
           <div className="num">{counts.Assessment}</div>
           <div className="label">Assessment</div>
@@ -112,6 +116,10 @@ export default async function DashboardPage() {
         <div className="stat-card rejection">
           <div className="num">{counts.Rejection}</div>
           <div className="label">Rejection</div>
+        </div>
+        <div className="stat-card staffing">
+          <div className="num">{counts["Staffing/recruiter"]}</div>
+          <div className="label">Staffing/recruiter</div>
         </div>
         <div className="stat-card verification">
           <div className="num">{counts.Verification}</div>
@@ -164,13 +172,14 @@ export default async function DashboardPage() {
 }
 
 function iconClass(category: Category): string {
-  if (category === "Interview") return "i";
+  if (category === "Interview" || category === "Screening") return "i";
   if (category === "Offer") return "o";
   return "a";
 }
 
 function icon(category: Category): string {
   if (category === "Interview") return "🎙️";
+  if (category === "Screening") return "📞";
   if (category === "Offer") return "🎉";
   return "📝";
 }

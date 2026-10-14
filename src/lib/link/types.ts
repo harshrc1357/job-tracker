@@ -1,5 +1,7 @@
 // Vocabulary follows GLOSSARY.md. The Linker is a pure function: facts in, decision out.
 
+import type { Category } from "@/lib/categories";
+
 export const STAGES = ["Applied", "Screening", "Assessment", "Interview", "Offer"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -17,8 +19,32 @@ export type EmailKind =
   | "rejection"
   | "reminder"
   | "outreach"
+  // A staffing agency's job description. Stored and shown, never an Application by itself.
+  | "staffing"
   | "verification"
   | "marketing";
+
+// Mail that moves an application forward. If one arrives for a role we have no application
+// for, the Applied email probably never reached us, so we create the application. It is also
+// what turns a staffing agency's thread into an Application.
+export const PROGRESS_KINDS: readonly EmailKind[] = ["screening", "assessment", "interview", "offer"];
+
+// My own reply is evidence that a thread exists, never that the process moved.
+export const movesProcessForward = (email: { kind: EmailKind; fromMe: boolean }) => !email.fromMe && PROGRESS_KINDS.includes(email.kind);
+
+// The one place a classifier category becomes a kind. The sync-time linker and the rebuild
+// after an override both read it, so a new category cannot be known to one and not the other.
+export const KIND_BY_CATEGORY: Record<Category, EmailKind> = {
+  Applied: "applied",
+  Screening: "screening",
+  Assessment: "assessment",
+  Interview: "interview",
+  Offer: "offer",
+  Rejection: "rejection",
+  Reminder: "reminder",
+  "Staffing/recruiter": "staffing",
+  Verification: "verification",
+};
 
 export type EmailFacts = {
   threadId: string | null;

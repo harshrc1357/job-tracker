@@ -71,6 +71,56 @@ describe("decideLink: mail that never touches an application (scenarios 35, 36, 
   });
 });
 
+// A staffing agency's job description is a lead, not a step in a process he is in.
+describe("decideLink: Staffing/recruiter mail never makes an Application of its own", () => {
+  const jd = (over: Partial<EmailFacts> = {}) => mail({ kind: "staffing", employer: "Apex Systems", role: "Data Engineer", threadId: "t9", ...over });
+
+  test("a job description with no Application behind its thread is ignored, not created and not asked about", () => {
+    expect(decideLink(jd(), [])).toMatchObject({ action: "ignore" });
+  });
+
+  test("it is ignored even when an Application at the same employer and role exists, so nothing attaches by guess", () => {
+    const decision = decideLink(jd(), [app({ id: 5, employer: "Apex Systems", role: "Data Engineer" })]);
+    expect(decision.action).toBe("ignore");
+  });
+
+  test("it never reaches Review, even when its thread is claimed by two Applications", () => {
+    const apps = [app({ id: 1, threadIds: ["t9"] }), app({ id: 2, threadIds: ["t9"] })];
+    expect(decideLink(jd(), apps).action).toBe("ignore");
+  });
+
+  test("once its thread belongs to an Application it joins that Application's timeline", () => {
+    const decision = decideLink(jd(), [app({ id: 7, employer: "Apex Systems", threadIds: ["t9"] })]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 7, confidence: 1, flagged: false, reopen: false });
+  });
+
+  test("it does not reopen a rejected Application", () => {
+    const decision = decideLink(jd(), [app({ id: 7, rejected: true, threadIds: ["t9"] })]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 7, reopen: false });
+  });
+});
+
+// The agency is the Employer, so every role it recruits for is one Employer to the Linker.
+// These pin what that costs: a role-less follow-up is a guess, and a guess is flagged or asked.
+describe("decideLink: an agency is one Employer for all of its roles (scenario 51)", () => {
+  const screen = (over: Partial<EmailFacts> = {}) => mail({ kind: "screening", employer: "Apex Systems", role: null, threadId: "t-new", ...over });
+  const apex = (id: number, role: string) => app({ id, employer: "Apex Systems", role });
+
+  test("a role-less Screening attaches, flagged, when exactly one Application is open at the agency", () => {
+    const decision = decideLink(screen(), [apex(3, "Data Engineer")]);
+    expect(decision).toMatchObject({ action: "attach", applicationId: 3, flagged: true });
+    if (decision.action === "attach") expect(decision.confidence).toBeLessThan(0.9);
+  });
+
+  test("with two open at the agency it asks instead of picking one", () => {
+    expect(decideLink(screen(), [apex(3, "Data Engineer"), apex(4, "BI Developer")]).action).toBe("ask");
+  });
+
+  test("a Screening that names a different role at the agency is a new Application", () => {
+    expect(decideLink(screen({ role: "BI Developer" }), [apex(3, "Data Engineer")]).action).toBe("create");
+  });
+});
+
 describe("decideLink: employer + role on a new thread (scenarios 2, 3, 4, 5, 9, 10, 11, 12)", () => {
   const snowflake = (id: number, role: string) => app({ id, employer: "Snowflake", role });
 

@@ -20,6 +20,8 @@ const TABS: Tab[] = ["All", ...CATEGORIES];
 // uses the plain .split-avatar default styling.
 function avatarClass(category: string): string {
   switch (category) {
+    case "Screening":
+      return "split-avatar screening";
     case "Assessment":
       return "split-avatar assessment";
     case "Interview":
@@ -30,6 +32,8 @@ function avatarClass(category: string): string {
       return "split-avatar rejection";
     case "Reminder":
       return "split-avatar reminder";
+    case "Staffing/recruiter":
+      return "split-avatar staffing";
     case "Verification":
       return "split-avatar verification";
     default:

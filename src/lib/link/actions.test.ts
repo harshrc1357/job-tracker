@@ -8,6 +8,7 @@ import * as schema from "@/db/schema";
 import { applications, jobApplications, linkExamples, reviewItems } from "@/db/schema";
 import { linkPendingEmails } from "./store";
 import { detachEmail, loadAppRows, mergeApplications, resolveReview, setStage, splitApplication } from "./actions";
+import { pipelineApps } from "./views";
 
 const { pushSchema } = createRequire(import.meta.url)("drizzle-kit/api") as typeof import("drizzle-kit/api");
 
@@ -50,6 +51,28 @@ describe("loadAppRows", () => {
     await link();
     const rows = await loadAppRows(db as never);
     expect(rows.every((r) => r.needsReview)).toBe(true);
+  });
+});
+
+describe("Screening applications", () => {
+  test("show up under the Pipeline Screening filter", async () => {
+    await addEmail({ threadId: "s1" });
+    await addEmail({ threadId: "s1", category: "Screening", role: null });
+    await link();
+    const rows = await loadAppRows(db as never);
+    expect(pipelineApps(rows, "screening")).toHaveLength(1);
+    expect(pipelineApps(rows, "active")).toHaveLength(1);
+  });
+
+  test("keep their stage when a later email is taken out and the application is rebuilt", async () => {
+    await addEmail({ threadId: "s2" });
+    await addEmail({ threadId: "s2", category: "Screening", role: null });
+    // Its own thread: detaching moves a whole thread, and the other two must stay.
+    const later = await addEmail({ threadId: "s2b", category: "Assessment" });
+    await link();
+    expect((await appsNow())[0].stage).toBe("Assessment");
+    await detachEmail(db as never, later.id);
+    expect((await appsNow())[0].stage).toBe("Screening");
   });
 });
 
@@ -144,6 +167,33 @@ describe("splitApplication", () => {
     const later = await addEmail({ threadId: "t2", category: "Offer", role: null });
     await link();
     expect((await emailRow(later.id)).jobApplicationId).toBe(newId);
+  });
+});
+
+describe("detaching an Application's Screening email", () => {
+  // The agency's job description joined the Application when the Screening mail arrived in
+  // its thread. Detaching moves the whole thread; a job description has nothing to ask the
+  // owner, so it goes back to the Inbox. Staffing/recruiter mail is never in Review.
+  async function apexThread() {
+    const jd = await addEmail({ category: "Staffing/recruiter", company: "Apex Systems", role: "Data Engineer", threadId: "ap-1", receivedAt: new Date(Date.UTC(2026, 8, 1, 9)) });
+    const screen = await addEmail({ category: "Screening", company: "Apex Systems", role: "Data Engineer", threadId: "ap-1", receivedAt: new Date(Date.UTC(2026, 8, 3, 9)) });
+    await link();
+    return { jd, screen };
+  }
+
+  test("sends the adopted job description back to the Inbox, not into Review", async () => {
+    const { jd, screen } = await apexThread();
+    expect((await emailRow(jd.id)).jobApplicationId).not.toBeNull();
+    await detachEmail(db as never, screen.id);
+    expect(await emailRow(jd.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    expect((await db.select().from(reviewItems)).map((i) => i.emailId)).toEqual([screen.id]);
+  });
+
+  test("detaching the job description itself never puts it in Review either", async () => {
+    const { jd } = await apexThread();
+    await detachEmail(db as never, jd.id);
+    expect(await emailRow(jd.id)).toMatchObject({ linkState: "ignored", jobApplicationId: null });
+    expect((await db.select().from(reviewItems)).map((i) => i.emailId)).not.toContain(jd.id);
   });
 });
 

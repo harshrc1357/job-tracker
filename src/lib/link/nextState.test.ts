@@ -35,6 +35,11 @@ describe("nextState: stage only moves forward (scenarios 22, 23, 24)", () => {
   test("a recruiter outreach never changes the stage", () => {
     expect(nextState(state({ stage: "Screening" }), { kind: "outreach", round: null }).stage).toBe("Screening");
   });
+
+  test("a staffing agency's job description changes neither the stage nor a rejection", () => {
+    expect(nextState(state({ stage: "Interview", round: 1 }), { kind: "staffing", round: null })).toMatchObject({ stage: "Interview", round: 1, status: "open" });
+    expect(nextState(state({ stage: "Screening", status: "rejected" }), { kind: "staffing", round: null })).toMatchObject({ stage: "Screening", status: "rejected", flags: [] });
+  });
 });
 
 describe("nextState: interview rounds (scenario 23)", () => {

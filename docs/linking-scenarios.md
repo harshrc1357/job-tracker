@@ -47,7 +47,7 @@ Every scenario below becomes a test against the Linker (and Stage rules) before 
 ## Non-application mail
 35. OTP / verify-your-email → never creates or moves an Application.
 36. Newsletter / "jobs you may like" from an Employer you applied to → ignored.
-37. Recruiter cold outreach, no prior application → Review item: new Application / not mine.
+37. Recruiter cold outreach, no prior application: an in-house recruiter writing to you personally is Screening (creates a flagged Application and sends the Telegram ping); a staffing agency's job description is Staffing/recruiter (scenarios 45–49). Mass outreach sent to many people is still skipped.
 38. Your own reply (is_from_me) → attach as event, never create an Application.
 39. Calendar invites (Calendly, Zoom, Google Calendar) → attach by Thread, else by Employer + Role in body, else ask.
 40. Email addressed to a different candidate or forwarded by you to someone → ignore.
@@ -58,8 +58,18 @@ Every scenario below becomes a test against the Linker (and Stage rules) before 
 43. Sync interrupted mid-run → resumable; partially linked state is never visible as a wrong merge.
 44. Override (split/merge/detach) → later Emails in that Thread follow the corrected Application; the override is stored as a labelled example.
 
+## Screening and Staffing/recruiter
+45. A recruiter's intro, phone-screen invite or request for your availability → Screening: the Application moves to the Screening stage (or is created there, flagged, if no Applied email came first) and you get the Telegram ping, repeat reminders and due-date extraction.
+46. A staffing agency recruiter sends position details or a job description and asks you to apply → Staffing/recruiter: stored and shown in the Inbox, with the agency as the Employer. No Application, no Review item, no Telegram. The client it names stays in the evidence text.
+47. The same Gmail thread later becomes a Screening, Assessment, Interview or Offer email → the Application is created with the agency as Employer, and the earlier job descriptions in that thread join its timeline. The Application's first-seen date becomes the job description's date; stage and last activity come from the real emails.
+48. Another job description arrives in a thread that already belongs to an Application → it joins that Application's timeline. It never changes the stage and never reopens a rejection. Like any email it counts as activity, so it clears Ghosted.
+49. The client later writes from its own name or domain → a different Employer, so a separate Application. Use Merge on the Application page if they are the same job. There is no agency-to-client matching.
+50. You detach the Screening email (or the job description) of such an Application → the whole Gmail thread leaves it, the Screening email goes to Review like any detached email, and the job descriptions go back to the Inbox. A job description never reaches Review.
+51. A Screening from the same agency names no role → it attaches, flagged, when exactly one Application is open at that agency, and goes to Review when two are. The agency is one Employer for all its roles, so this is the ordinary single-candidate rule. A different named role is a new Application.
+
 ## Where each scenario is tested
-- Linker (`src/lib/link/decideLink.test.ts`): 1-11, 13-18, 20-21, 24, 26-29, 31-34, 37, 39. Scenario 12 (req ids) is exercised through role matching.
+- Linker (`src/lib/link/decideLink.test.ts`): 1-11, 13-18, 20-21, 24, 26-29, 31-34, 39, 48. Scenario 12 (req ids) is exercised through role matching.
+- Screening and Staffing/recruiter: 45 in `store.test.ts`, `actions.test.ts` and `prompt.test.ts`; 46-49 in `decideLink.test.ts`, `planLinks.test.ts` (adoption) and `store.test.ts` (real SQL); 50 in `actions.test.ts`; 51 in `decideLink.test.ts`. What the model actually answers for 45–46 is only measured by `npm run eval:extraction`.
 - Stage rules (`src/lib/link/nextState.test.ts`): 22-25, 30.
 - Own replies and ignored mail (`decideLink.test.ts`): 35, 36, 38.
 - Classifier extraction (T4): 19 (forwarded blocks), 40 (mail not addressed to the owner), and employer extraction for 13-15.

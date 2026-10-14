@@ -72,7 +72,7 @@ body {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 16px;
   margin-bottom: 32px;
 }
@@ -100,6 +100,9 @@ body {
   color: var(--ink-soft);
   margin-top: 4px;
 }
+.stat-card.screening .num {
+  color: var(--blue);
+}
 .stat-card.assessment .num {
   color: var(--gold);
 }
@@ -117,6 +120,9 @@ body {
 }
 .stat-card.verification .num {
   color: var(--teal);
+}
+.stat-card.staffing .num {
+  color: var(--coral);
 }
 
 .panel {
@@ -213,6 +219,15 @@ tr:last-child td {
 .badge.verification {
   background: var(--teal-soft);
   color: var(--teal);
+}
+.badge.staffing {
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+.badge.ghosted {
+  background: var(--grey-soft);
+  color: var(--grey);
+  margin-left: 8px;
 }
 .badge .dot {
   width: 6px;
@@ -378,6 +393,10 @@ tr:last-child td {
   background: var(--grey-soft);
   color: var(--grey);
 }
+.split-avatar.screening {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
 .split-avatar.assessment {
   background: var(--gold-soft);
   color: var(--gold);
@@ -401,6 +420,10 @@ tr:last-child td {
 .split-avatar.verification {
   background: var(--teal-soft);
   color: var(--teal);
+}
+.split-avatar.staffing {
+  background: var(--coral-soft);
+  color: var(--coral);
 }
 .split-item-body {
   flex: 1;
@@ -703,6 +726,9 @@ td.dim, .dim { color: var(--ink-soft); }
 .tl-item.k-Offer::before { background: var(--violet); }
 .tl-item.k-Rejection::before { background: var(--red); }
 .tl-item.k-Applied::before { background: var(--blue); }
+.tl-item.k-Screening::before { background: var(--teal); }
+/* The label has a slash, which a class selector has to escape. */
+.tl-item.k-Staffing\/recruiter::before { background: var(--coral); }
 .tl-title { font-weight: 600; }
 .tl-sub { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
 .overrides { border-top: 1px solid var(--border); padding-top: 20px; display: grid; gap: 14px; }

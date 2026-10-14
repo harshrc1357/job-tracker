@@ -2,6 +2,10 @@
 
 Next.js + Drizzle/Postgres app that syncs job-related Gmail, classifies it with an LLM, and sends Telegram reminders.
 
+## Handoff
+
+Resuming the Applications build (issues #1 to #16, PRs #11 and #17), running its real-data steps, or merging anything: read `docs/HANDOFF.md` first. It names the branch to work on.
+
 ## Agent skills
 
 ### Issue tracker

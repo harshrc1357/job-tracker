@@ -8,25 +8,15 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { applications, jobApplications, reviewItems } from "@/db/schema";
-import { isCategory, type Category } from "@/lib/categories";
-import { planLinks, type LinkableEmail, type TrackedApplication } from "./planLinks";
-import { STAGES, type EmailKind, type Stage } from "./types";
+import { isCategory, STAFFING_CATEGORY } from "@/lib/categories";
+import { planLinks, type LinkableEmail, type TrackedApplication, type WaitingJobDescription } from "./planLinks";
+import { KIND_BY_CATEGORY, STAGES, movesProcessForward, type Stage } from "./types";
 
 // Any drizzle Postgres database: postgres-js in production, PGlite in tests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = PgDatabase<any, any>;
 
 export type LinkSummary = { processed: number; created: number; attached: number; review: number; ignored: number };
-
-const KIND_BY_CATEGORY: Record<Category, EmailKind> = {
-  Applied: "applied",
-  Assessment: "assessment",
-  Interview: "interview",
-  Offer: "offer",
-  Rejection: "rejection",
-  Reminder: "reminder",
-  Verification: "verification",
-};
 
 const DEFAULT_LIMIT = 500;
 
@@ -111,7 +101,26 @@ export async function linkPendingEmails(
     round: r.interviewRound,
   }));
 
-  const plan = planLinks(emails, existing);
+  // Job descriptions stored earlier wait, unlinked, for their thread to become an Application.
+  // Only threads where something is moving forward in this batch can adopt them.
+  const forwardThreads = [...new Set(emails.filter(movesProcessForward).flatMap((e) => (e.threadId ? [e.threadId] : [])))];
+  const waiting: WaitingJobDescription[] = forwardThreads.length
+    ? (
+        await db
+          .select({ emailId: applications.id, threadId: applications.threadId, receivedAt: applications.receivedAt })
+          .from(applications)
+          .where(
+            and(
+              eq(applications.linkState, "ignored"),
+              eq(applications.category, STAFFING_CATEGORY),
+              isNull(applications.jobApplicationId),
+              inArray(applications.threadId, forwardThreads),
+            ),
+          )
+      ).flatMap((r) => (r.threadId ? [{ emailId: r.emailId, threadId: r.threadId, receivedAt: r.receivedAt }] : []))
+    : [];
+
+  const plan = planLinks(emails, existing, waiting);
 
   await db.transaction(async (tx) => {
     // New applications first, so emails can point at real ids.

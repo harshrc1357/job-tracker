@@ -45,6 +45,20 @@ const seeds: Seed[] = [
   { c: "Roblox", role: null, cat: "Reminder", d: 40, subj: "Are you still interested in a position at Roblox?" },
   { c: "Insight Global", role: "Data Engineer", cat: "Applied", d: 1, subj: "Application received" },
   { c: "Month2Month", role: null, cat: "Applied", d: 36, subj: "Application received" },
+  // A staffing agency's job description whose thread later becomes a recruiter screen: the
+  // Application is created under the agency and the job description joins its timeline.
+  { c: "Apex Systems", role: "Data Engineer", cat: "Staffing/recruiter", d: 20, subj: "Data Engineer - job description (hybrid)", thread: "ap-1", from: "Dana Lee <dana@apexsystems.example>" },
+  { c: "Apex Systems", role: "Data Engineer", cat: "Screening", d: 23, subj: "Quick phone screen with the client?", thread: "ap-1", from: "Dana Lee <dana@apexsystems.example>" },
+  // A job description whose thread never converts: stays in the Inbox, nowhere else.
+  { c: "Robert Half", role: "BI Developer", cat: "Staffing/recruiter", d: 30, subj: "BI Developer - job description", thread: "rh-1" },
+  // An in-house recruiter writing personally, no Applied email first.
+  { c: "Magpie Health Analytics", role: "Data Analyst", cat: "Screening", d: 38, subj: "Intro call about our Data Analyst role", from: "Sam Ortiz <sam@magpiehealth.example>" },
+  // A recent Screening after an Applied email.
+  { c: "Juniper Square", role: "Applied AI Engineer", cat: "Applied", d: 36, subj: "Thank you for submitting your application", thread: "js-1" },
+  { c: "Juniper Square", role: "Applied AI Engineer", cat: "Screening", d: 40, subj: "Can we find 20 minutes this week?", thread: "js-1" },
+  // Got past Applied, then went quiet: Ghosted now covers it.
+  { c: "Northwind", role: "Backend Engineer", cat: "Applied", d: 2, subj: "Application received", thread: "nw-1" },
+  { c: "Northwind", role: "Backend Engineer", cat: "Interview", d: 6, subj: "Interview round 1", thread: "nw-1", round: 1 },
 ];
 // Plus a spread of quiet Applied-only applications so Ghosted 30d+ has something to show.
 for (let i = 0; i < 12; i++) seeds.push({ c: `Quiet Co ${i + 1}`, role: "Software Engineer", cat: "Applied", d: i, subj: "Thanks for applying" });
@@ -53,7 +67,7 @@ let n = 0;
 for (const s of seeds) {
   n++;
   await db.insert(applications).values({
-    gmailMessageId: `seed${n}`, threadId: s.thread ?? null, company: s.c, role: s.role, category: s.cat,
+    gmailMessageId: `seed${n}`, threadId: s.thread ?? null, company: s.c, employer: s.c, role: s.role, category: s.cat,
     subject: s.subj, snippet: s.subj, body: `${s.subj}\n\n(synthetic preview data)`, fromEmail: s.from ?? `careers@${s.c.toLowerCase().replace(/\W/g, "")}.example`,
     receivedAt: day(s.d), interviewRound: s.round ?? null, extractedAt: new Date(),
   });

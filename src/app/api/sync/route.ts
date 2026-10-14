@@ -295,7 +295,7 @@ export async function GET(req: NextRequest) {
 
       for (const outcome of toStore) {
         // A backfill re-imports mail that is days or weeks old into an empty database.
-        // Every Interview/Assessment/Offer row in it looks brand new to the code above,
+        // Every Screening/Interview/Assessment/Offer row in it looks brand new to the code above,
         // so without this the rebuild pushes dozens of stale interview invites at him
         // in one burst, and a genuinely new one is indistinguishable in the flood.
         if (isBackfill) continue;

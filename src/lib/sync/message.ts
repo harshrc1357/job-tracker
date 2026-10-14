@@ -29,7 +29,10 @@ export function buildJobQuery(days: number): string {
     `newer_than:${days}d ` +
     '(application OR interview OR assessment OR offer OR "thank you for applying" OR ' +
     'recruiting OR careers OR hiring OR OTP OR "one-time" OR "verification code" OR ' +
-    '"security code" OR "verify your email" OR "confirm your email")'
+    '"security code" OR "verify your email" OR "confirm your email" OR ' +
+    // A recruiter's intro or screen often never says "interview" or "application", and a
+    // staffing agency's mail says "job description".
+    'recruiter OR "phone screen" OR "screening call" OR "intro call" OR "job description")'
   );
 }
 
@@ -164,7 +167,7 @@ export async function processMessage(
   }
 }
 
-// Repeating "coming up" nudges. Only Interview, Assessment and Offer rows are
+// Repeating "coming up" nudges. Only Screening, Interview, Assessment and Offer rows are
 // eligible — Applied, Rejection, Reminder and Verification never nudge. Cadence and
 // cap live in decideReminder (see reminderPolicy.ts), which is unit tested; this
 

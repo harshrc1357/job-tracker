@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db, isDbConfigured } from "@/db/client";
 import { loadAppRows } from "@/lib/link/actions";
-import { PIPELINE_FILTERS, pipelineApps, pipelineCounts, type AppRow, type PipelineFilter } from "@/lib/link/views";
+import { PIPELINE_FILTERS, daysQuiet, isGhosted, pipelineApps, pipelineCounts, type AppRow, type PipelineFilter } from "@/lib/link/views";
 import { MANUAL_STAGE_FLAG, STAGES } from "@/lib/link/types";
 import { shortDate } from "@/lib/format";
 import { Notice } from "./Notice";
@@ -27,6 +27,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
   const counts = pipelineCounts(rows);
   const shell = await loadShellCounts(db, rows);
   const cards = pipelineApps(rows, filter);
+  const now = new Date();
 
   return (
     <>
@@ -47,7 +48,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
       ) : (
         <div className="cards">
           {cards.map((a) => (
-            <PipelineCard key={a.id} app={a} />
+            <PipelineCard key={a.id} app={a} quietDays={isGhosted(a, now) ? daysQuiet(a, now) : null} />
           ))}
         </div>
       )}
@@ -57,7 +58,8 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
 
 const STEP_LABEL: Record<string, string> = { Applied: "Applied", Screening: "Screen", Assessment: "Assess", Interview: "Interview", Offer: "Offer" };
 
-function PipelineCard({ app }: { app: AppRow }) {
+// quietDays is set only when the application is Ghosted (open, no email for 30+ days).
+function PipelineCard({ app, quietDays }: { app: AppRow; quietDays: number | null }) {
   const at = STAGES.indexOf(app.stage);
   const stageText = app.stage === "Interview" && app.interviewRound > 0 ? `Interview · round ${app.interviewRound}` : app.stage;
   return (
@@ -68,6 +70,7 @@ function PipelineCard({ app }: { app: AppRow }) {
         <span className="dot" />
         {app.rejected ? `Rejected · was ${stageText}` : stageText}
       </span>
+      {quietDays !== null && <span className="badge ghosted">Ghosted · quiet {quietDays} days</span>}
       <div className="stepper" aria-hidden="true">
         {STAGES.map((s, i) => (
           <div key={s} className={`step ${i < at ? "done" : i === at ? "now" : ""}`}>

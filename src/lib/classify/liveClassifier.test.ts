@@ -6,6 +6,11 @@ import { classifyEmail, type ClassifiableEmail } from "./index";
 //
 //   RUN_LIVE_LLM=1 npx vitest run src/lib/classify/liveClassifier.test.ts
 //
+// vitest does not read .env, so the key has to reach the process another way:
+//
+//   node --env-file=.env node_modules/vitest/vitest.mjs run src/lib/classify/liveClassifier.test.ts
+//   (with RUN_LIVE_LLM=1 set: `$env:RUN_LIVE_LLM="1"` in PowerShell, `export RUN_LIVE_LLM=1` in bash)
+//
 // Every other test in this repo stubs fetch and therefore only proves the plumbing.
 // This file is the only thing that proves the PROMPT works, which is where all three
 // of the reported misclassifications actually lived. Roughly $0.0015 a full run.
@@ -168,19 +173,89 @@ describe.skipIf(!LIVE)("classifyEmail against live models", () => {
     expect(result.decision).toBe("skip");
   });
 
-  test("recruiter cold prospecting for a role he never applied to is not job mail", async () => {
-    // Arrange: the hardest promotional case, because it is written by a human, names
-    // a real person, and mentions an interview.
+  test("a recruiter blast to many people is not job mail", async () => {
+    // Arrange: the case that must stay a skip. Same sender type as the staffing cases
+    // below, but sent to a list: no name, no single role, an unsubscribe footer.
     const result = await classifyEmail(
       email({
-        subject: "AI Engineer opportunity — open to a chat?",
-        from: "Dana Whitfield <dana@talentbridge.io>",
-        body: "Hi Harsh, I came across your profile and I am recruiting for an AI Engineer role at a Series B startup. If you are interested I can set up an interview with the hiring manager this week. Let me know and I will send over the job description.",
+        subject: "Hot AI and data jobs this week from our recruiters",
+        from: "TalentBridge Jobs <jobs@talentbridge.io>",
+        headers: { "list-unsubscribe": "<mailto:unsub@talentbridge.io>" },
+        body: "Hi there, here are 12 open roles our recruiters are filling right now: AI Engineer, Data Engineer, BI Developer and more. Reply to any recruiter on the list to learn more, or forward this to a friend. Unsubscribe at any time.",
       })
     );
 
     // Assert
     expect(result.decision).toBe("skip");
+  });
+
+  // Staffing/recruiter and Screening (issues #13, #14). These were written from the rules
+  // in the prompt, not from real mail, and have not been run against a model by the
+  // author: a failure here is a finding about the prompt to read, not automatically a bug.
+  describe("recruiters", () => {
+    test("an agency recruiter writing personally about a role, offering the job description, is Staffing/recruiter", async () => {
+      // Arrange: this used to be a skip. The owner decided agency recruiter mail is kept.
+      const result = await classifyEmail(
+        email({
+          subject: "AI Engineer opportunity - open to a chat?",
+          from: "Dana Whitfield <dana@talentbridge.io>",
+          body: "Hi Harsh, I came across your profile and I am recruiting for an AI Engineer role at a Series B startup. If you are interested I can set up an interview with the hiring manager this week. Let me know and I will send over the job description.",
+        })
+      );
+
+      // Assert
+      expect(result).toMatchObject({ decision: "store", category: "Staffing/recruiter" });
+    });
+
+    test("an agency job description is Staffing/recruiter, the agency is the employer, the client is in the evidence", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Data Engineer (hybrid, 12 months) - job description",
+          from: "Dana Lee <dana@apexsystems.com>",
+          body: [
+            "Hi Harsh,",
+            "",
+            "I am a recruiter with Apex Systems. My client, Northwind Logistics, is hiring a Data Engineer for a 12 month hybrid contract.",
+            "",
+            "Requirements: 3+ years of Python and SQL, Airflow, a cloud warehouse. Pay: $60-70/hr.",
+            "",
+            "If this fits, please apply at https://apexsystems.example/jobs/8841 and send me your updated resume.",
+            "",
+            "Dana Lee | Apex Systems",
+          ].join("\n"),
+        })
+      );
+
+      // Assert
+      expect(result).toMatchObject({ decision: "store", category: "Staffing/recruiter", employer: "Apex Systems" });
+      if (result.decision === "store") expect(result.evidence).toMatch(/Northwind/i);
+    });
+
+    test("a recruiter's phone screen after he applied is Screening, not Interview", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Intro call about your Data Analyst application",
+          from: "Priya Nair <recruiting@brightpath.com>",
+          body: "Hi Harsh, thanks for applying to the Data Analyst role at BrightPath Health. I would like to set up a 20 minute intro call to learn about your background. What does your availability look like on Thursday or Friday?",
+        })
+      );
+
+      // Assert
+      expect(result).toMatchObject({ decision: "store", category: "Screening", employer: "BrightPath Health" });
+    });
+
+    test("an in-house recruiter writing to him personally, before he applied, is Screening", async () => {
+      const result = await classifyEmail(
+        email({
+          subject: "Data Analyst role at Magpie Health",
+          from: "Sam Ortiz <sam@magpiehealth.com>",
+          body: "Hi Harsh, I am a recruiter here at Magpie Health. Your background looks like a strong fit for our Data Analyst opening. Do you have 15 minutes this week for a quick call?",
+        })
+      );
+
+      // Assert
+      expect(result).toMatchObject({ decision: "store", category: "Screening", employer: "Magpie Health" });
+    });
   });
 
   test("a real interview invitation is Interview", async () => {
