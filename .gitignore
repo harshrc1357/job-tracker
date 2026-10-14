@@ -17,3 +17,6 @@ backups/
 
 # Backfill run logs
 logs/
+
+# A pg_dump holds every email body and the Gmail refresh token.
+*.dump

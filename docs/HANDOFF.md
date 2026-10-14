@@ -37,7 +37,7 @@ Rules:
 4. Do the real-data steps **before** merging anything. Merging #11 deploys, and the deployed code needs the migrated database.
 5. After both merge, start new work (for example #16) on a new branch from `main`.
 
-What to review: PR #17 is a small diff (33 files; read the commit list: one commit per ticket, then the review-fixes commit, then the live-test commit). PR #11 is large (about 140 files), was reviewed with the `code-review` skill, and its blockers are fixed.
+What to review: PR #17 is a small diff (about 35 files; read the commit list: one commit per ticket, then the review-fixes commit, the live-test commit and the docs). PR #11 is large (about 140 files), was reviewed with the `code-review` skill, and its blockers are fixed.
 
 ## 3. Before you start
 
@@ -49,8 +49,8 @@ Your local `.env` must have these (never paste its contents anywhere):
 |---|---|
 | every script | `DATABASE_URL` (the Supabase pooler string; the scripts open one connection). `db:secure` uses `DIRECT_URL` instead when it is set, because it runs `GRANT`/`REVOKE`, which need a stable connection: add the session-pooler or direct string as `DIRECT_URL` if `db:secure` fails on the transaction pooler |
 | `backfill:threads`, `backfill` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and a Gmail login already saved in the database (you have one: the app syncs today) |
-| `eval:extraction`, `backfill`, `link:history` | `OPENROUTER_API_KEY`, `OWNER_EMAIL` |
-| `npm run dev` | also `SESSION_SECRET`, `GOOGLE_LOGIN_REDIRECT_URI`, `CRON_SECRET`; `http://localhost:3000/api/auth/login/callback` must be an authorised redirect URI on the Google OAuth client |
+| `eval:extraction`, `backfill`, `link:history` | `OPENROUTER_API_KEY`, and `OWNER_EMAIL` set to your own Gmail address (`link:history` uses it to tell your replies from other people's; if it is missing nothing fails, the links are just wrong) |
+| `npm run dev` | also `SESSION_SECRET` and `GOOGLE_LOGIN_REDIRECT_URI=http://localhost:3000/api/auth/login/callback`, which must also be an authorised redirect URI on the Google OAuth client |
 
 Get the code and prove it works on your machine (no database or keys needed; the tests run an in-process Postgres):
 
@@ -59,9 +59,11 @@ git fetch origin
 git switch claude/screening-staffing-ghosted
 git pull
 npm ci
-npm test            # expect: 332 passed, 26 skipped (the skipped ones are live-model tests)
-npm run typecheck   # expect: no output
+npm test            # expect: 332 passed, 26 skipped
+npm run typecheck   # expect: two banner lines starting with `>` and no errors
 ```
+
+The 26 skipped tests are 18 that call the real models (they run only with `RUN_LIVE_LLM=1`, step 4c) and 8 that write to your real database (they run only with `RUN_DB_TESTS=1`). **Never set `RUN_DB_TESTS`.**
 
 Commands below work in PowerShell and bash. Setting an environment variable differs: PowerShell `$env:NAME="value"`, bash `export NAME=value`. Where the doc says "set it in `.env`", edit the file instead.
 
@@ -71,6 +73,16 @@ Commands below work in PowerShell and bash. Setting an environment variable diff
 
 Do the steps in order. Each says what it writes, what you should see, and when to stop. **Stop and bring the output to Claude Code if anything differs.**
 
+**Dry runs.** Several steps start with `-- --dry-run`. If PowerShell or npm ever drops the flag, the "dry run" is a real run. Every dry run finishes within seconds and prints `DRY RUN` (`backfill:threads`, `backfill`) or `Dry run: nothing written.` (`link:history`). If instead you see it counting up through `100/2356` or similar, press Ctrl-C.
+
+**Pausing the sync.** Three things can call your live `/api/sync`; to pause it, stop all three:
+
+| Trigger | Stop | Start again |
+|---|---|---|
+| Windows scheduled task `JobTrackerSync` (every 5 minutes, the main one; log in `sync-trigger.log` in the repo root) | `schtasks /Change /TN JobTrackerSync /DISABLE` | `schtasks /Change /TN JobTrackerSync /ENABLE` |
+| GitHub Actions "Gmail sync" (the backstop) | Actions → Gmail sync → ⋯ → Disable workflow | Enable workflow |
+| cron-job.org, if you still have a job there (the code mentions one) | pause the job | resume it |
+
 What each command writes, at a glance:
 
 | Command | Writes to the database | LLM calls | Safe to rerun |
@@ -78,7 +90,7 @@ What each command writes, at a glance:
 | `migrate:linking` | adds columns and tables; nothing dropped or rewritten | 0 | yes |
 | `db:secure` | locks the new tables from the public API | 0 | yes |
 | `backfill:threads` | `thread_id` on old emails | 0 | yes, resumes |
-| `eval:extraction` | nothing (writes `logs/extraction-eval.json`) | about the sample size | yes |
+| `eval:extraction` | nothing (writes `logs/extraction-eval.json`) | about the sample size | yes, but a second `--sample` overwrites the file, so rename a labelled one first |
 | `backfill` | new emails found by the wider Gmail search; mail the classifier skips goes to `ignored_messages` | 1 to 2 per new message | yes, resumes |
 | `link:history` | old emails get `employer`, `company`, `via`, `role`, `interview_round` (only where the model found a value); links; `job_applications`; `review_items` | 1 per old email not yet extracted | yes, resumes |
 | `npm run dev` | only when you click an override | 0 | n/a |
@@ -88,7 +100,11 @@ What each command writes, at a glance:
 Take a backup you could restore from. Either:
 
 - the Supabase dashboard's Database → Backups page (what it offers depends on your plan; note the date of the latest one), or
-- your own copy: `pg_dump "<your DATABASE_URL>" --no-owner --format=custom --file=job-tracker-backup.dump` (needs the PostgreSQL command-line tools).
+- your own copy, with the PostgreSQL command-line tools and the session-pooler or direct connection string (the transaction pooler is not suitable for a dump):
+  `pg_dump '<your connection string>' --no-owner --schema=public --format=custom --file=backups/job-tracker-before-linking.dump`
+  Make the folder first (`mkdir backups`). Use **single quotes** (PowerShell expands `$` inside double quotes). The `backups/` folder is git-ignored. **The dump holds every email body and your Gmail refresh token: it must never reach GitHub.** `*.dump` is git-ignored as a second guard.
+
+To restore, use the dashboard, or ask Claude Code to write the `pg_restore` command with you; do not improvise one on production.
 
 Why: `link:history` overwrites the display `company` of old emails with the Employer the model read, and that is not reversible without a backup.
 
@@ -137,16 +153,16 @@ npm run eval:extraction -- --score
 
 You get per-field accuracy and `invented roles` (a role the model made up where the email names none; the costly error, since a made-up role can attach to the wrong Application). A missing role is safe: the Linker asks. Judge the numbers yourself; as a starting point (my suggestion, not a measured threshold), employer accuracy should be high enough that you would trust the cards, and invented roles should be about 0.
 
-Then rename the file so 4b does not overwrite your labels: `logs/extraction-eval.json` → `logs/extraction-eval-random.json`.
+Then rename the file so 4b does not overwrite your labels: `logs/extraction-eval.json` → `logs/extraction-eval-random.json`. If `--score` prints rows ending `-> (error)`, the key or the credits are wrong: fix that and rerun.
 
 **4b. The new categories** (about 150 calls, no labelling needed). A random sample is mostly Applied mail, so aim at the categories that could move:
 
 ```text
-npm run eval:extraction -- --sample=150 --categories=Interview,Assessment,Offer,Reminder
+npm run eval:extraction -- --sample=150 '--categories=Interview,Assessment,Offer,Reminder'
 npm run eval:extraction -- --score
 ```
 
-Ignore the `0.0%` accuracy lines (nothing is labelled). Read the part that follows: every email whose category the **new** prompt would change, as `Interview -> Screening: 3 (ids 12, 40, 77)`. Open those rows in `logs/extraction-eval.json`; each shows the subject, sender, what is stored now and the model's evidence. Judge each by eye:
+Keep the quotes: PowerShell splits an unquoted comma list into separate arguments, and the script would silently see only `Interview`. Ignore the `0.0%` accuracy lines (nothing is labelled). Read the part that follows: every email whose category the **new** prompt would change, as `Interview -> Screening: 3 (ids 12, 40, 77)`. Open those rows in `logs/extraction-eval.json`; each shows the subject, sender, what is stored now and the model's evidence. Judge each by eye:
 
 | Shift | Good | Bad |
 |---|---|---|
@@ -155,6 +171,8 @@ Ignore the `0.0%` accuracy lines (nothing is labelled). Read the part that follo
 | `→ Staffing/recruiter` | an agency recruiter's job description; evidence names the client | a hiring company's own mail |
 | `→ (skipped)` | a newsletter or blast | anything you would have wanted |
 
+This only re-judges mail you already stored. Mail the old prompt skipped was never stored, so its first test is step 5.
+
 **4c. Live-model tests** (about 20 calls, a fraction of a cent). These run fixed example emails through the real models:
 
 ```text
@@ -162,7 +180,7 @@ $env:RUN_LIVE_LLM="1"        # PowerShell   (bash: export RUN_LIVE_LLM=1)
 node --env-file=.env node_modules/vitest/vitest.mjs run src/lib/classify/liveClassifier.test.ts
 ```
 
-The new recruiter cases were written from the prompt's rules and have never run against a model. A failure is a finding about the prompt to read, not automatically a bug. Unset `RUN_LIVE_LLM` afterwards.
+The new recruiter cases were written from the prompt's rules and have never run against a model. A failure is a finding about the prompt to read, not automatically a bug. Unset it afterwards: `Remove-Item Env:RUN_LIVE_LLM` (PowerShell) or `unset RUN_LIVE_LLM` (bash).
 
 **Gate.** Continue if employer and role look trustworthy and there are no patterns in the bad column. If there is a pattern, stop and give Claude Code the printed `--score` output (ids and counts only, never the file) and ask it to adjust the prompt test-first.
 
@@ -172,14 +190,16 @@ One decision to look out for here is in section 7 (an agency job description tha
 
 The search now also matches `recruiter`, `"phone screen"`, `"screening call"`, `"intro call"` and `"job description"`. Production has never seen that mail. After the deploy, the live sync would find up to 60 days of it, store it as new, and **send a Telegram message for every Screening, Interview, Assessment or Offer among it, however old**. `backfill` stores the same mail and never sends Telegram.
 
-Set `LLM_CALLS_PER_DAY=3000` in `.env` (this and step 6 share one daily counter), then:
+Set `LLM_CALLS_PER_DAY=3000` in `.env`, then:
 
 ```text
 npm run backfill -- --dry-run
 npm run backfill
 ```
 
-The dry run prints a line per chunk (`chunk 3 (14-21d ago): 41 listed, 6 new`); the "new" numbers added up are how many messages it will classify, at roughly one call each. It skips ids already in the database, resumes if interrupted, and stops cleanly when the day's cap is spent (`Every model has spent its daily cap already`); rerun tomorrow.
+The dry run prints a line for each of 12 five-day chunks (`chunk 3 (10-15d ago): 41 listed, 6 new`); the "new" numbers added up are how many messages it will classify, at roughly one call each. It skips ids already in the database and resumes if interrupted. When the day's cap is spent it stops with `Daily LLM cap reached. Stopping here ... rerun tomorrow and it resumes from this point.`
+
+**LLM budget, for steps 5 and 6.** `LLM_CALLS_PER_DAY` is a cap **per model**. After 3,000 calls on the primary model (`google/gemini-2.5-flash-lite`) the fallback (`openai/gpt-5-nano`) takes over silently, and step 4 never measured the fallback. The daily counter is also shared with the live sync on Vercel, which keeps its own cap of 1,000: on the day you run steps 5 and 6 the live sync may fall back to the other model or pause until tomorrow, and may send you a budget alert on Telegram. That is expected.
 
 **Done when** a dry run shows 0 new in every chunk.
 
@@ -190,9 +210,9 @@ npm run link:history -- --dry-run
 npm run link:history
 ```
 
-The dry run prints `phase 1: <N> emails in the last 60 days need employer/role extraction` (one LLM call each, about 2,356 on your inbox per the audit) and `phase 2: <M> emails would be linked`. With step 5 that may pass the 3,000 cap; if it prints `stopped early`, rerun later and it resumes. It will not link until extraction is complete.
+The dry run prints `phase 1: <N> emails in the last 60 days need employer/role extraction` (one LLM call each; the audit estimates up to about 2,356, which is a guess from the code, so trust your own N) and `phase 2: <M> emails would be linked`. With step 5 that may pass the 3,000 cap. If it prints `stopped early`, rerun later and it resumes; if it stops with nothing done, check `OPENROUTER_API_KEY` and your OpenRouter credits, because a bad key stops it the same way. It will not link until extraction is complete.
 
-**Done when** the log ends `phase 2 done: <X> applications created, <Y> emails attached, <Z> need review, <W> ignored`. **Write those four numbers down.** Then **remove `LLM_CALLS_PER_DAY` from `.env`**; forgetting it turns a one-off allowance into a standing one.
+**Done when** the log ends `phase 2 done: <X> applications created, <Y> emails attached, <Z> need review, <W> ignored` **and** a second `npm run link:history -- --dry-run` prints `phase 1: 0 emails` (an email that failed once, `skipped #<id>`, is left unextracted and unlinked, yet the run still ends with `phase 2 done`). **Write the four numbers down.** Then **remove `LLM_CALLS_PER_DAY` from `.env`**; forgetting it turns a one-off allowance into a standing one.
 
 My rule of thumb, not a measured limit: if `need review` is more than about one in ten of `attached + created`, bring the numbers to Claude Code before merging.
 
@@ -225,6 +245,7 @@ Vercel → the project → Settings → Environment Variables:
 
 ### Step 9. Merge, in this order
 
+0. **Refresh first.** Your live sync (old code) has kept storing new mail since step 2, without thread ids or extraction, and the new sync will never link such rows. Right before merging, rerun `npm run backfill:threads`, `npm run backfill` and `npm run link:history` (with `LLM_CALLS_PER_DAY` set again if the backlog is large; remove it afterwards). Then `npm run link:history -- --dry-run` must print `phase 1: 0 emails`.
 1. Open [PR #17](https://github.com/harshrc1357/job-tracker/pull/17). Check the Vercel preview check is green. Merge with **Create a merge commit** (it keeps one commit per ticket). Keep the branch.
 2. Open [PR #11](https://github.com/harshrc1357/job-tracker/pull/11). It now includes #17's commits. Wait for the Vercel check on the newest commit. **Only now merge it** (merge commit). This deploys.
 3. Delete both branches (GitHub offers the button after each merge).
@@ -232,7 +253,9 @@ Vercel → the project → Settings → Environment Variables:
 
 ### Step 10. Watch the first syncs
 
-GitHub → Actions → "Gmail sync" → the latest run → the "Trigger job-tracker sync" step prints the sync's JSON. Look at:
+First, once the deploy is live, run `npm run link:history -- --dry-run`. If it prints `phase 1:` above 0, mail slipped in between the refresh and the deploy: run `npm run link:history` once more.
+
+Then read a real sync result. The main trigger is the Windows task, which appends to `sync-trigger.log` and writes `sync-last-response.json` in the repo root (both git-ignored). The GitHub Actions run ("Gmail sync" → latest run → the "Trigger job-tracker sync" step) prints the same JSON, but may print `{"ok":true,"skipped":"too-soon"}` when another trigger ran a moment before. Look at:
 
 | Field | Expect |
 |---|---|
@@ -242,7 +265,7 @@ GitHub → Actions → "Gmail sync" → the latest run → the "Trigger job-trac
 | `linked`, `needsReview` | new mail gets linked; Review stays small |
 | `remindersSent` | 0, or one for a real upcoming deadline |
 
-For the first day watch Telegram. You should get a message only for genuinely new Screening, Interview, Assessment or Offer mail. **If a burst of old mail pings you:** Actions → "Gmail sync" → ⋯ → Disable workflow, then tell Claude Code.
+For the first day watch Telegram. You should get a message only for genuinely new Screening, Interview, Assessment or Offer mail. **If a burst of old mail pings you:** pause all three sync triggers (section 4, "Pausing the sync"), then tell Claude Code.
 
 ### Step 11. Close the issues
 
@@ -266,11 +289,11 @@ Mail the classifier skipped under the old prompt is recorded in `ignored_message
 
 Do **not** delete those rows and let the cron re-read them: the live sync pings for every old Screening/Interview/Assessment/Offer it finds. If you do it:
 
-1. Disable the "Gmail sync" workflow in GitHub Actions.
+1. Pause all three sync triggers (section 4, "Pausing the sync").
 2. Count first, in the Supabase SQL editor: `select count(*) from ignored_messages where created_at > now() - interval '60 days';` Each row costs one LLM call to re-classify; if the count is in the thousands it is probably not worth it.
 3. `delete from ignored_messages where created_at > now() - interval '60 days';`
 4. `LLM_CALLS_PER_DAY=3000` in `.env`, then `npm run backfill -- --dry-run`, `npm run backfill`, `npm run link:history`.
-5. Remove `LLM_CALLS_PER_DAY`, then re-enable the workflow.
+5. Remove `LLM_CALLS_PER_DAY`, then start the sync triggers again.
 
 ---
 
@@ -279,8 +302,8 @@ Do **not** delete those rows and let the cron re-read them: the live sync pings 
 | Problem | Fix |
 |---|---|
 | The deploy misbehaves | PR #11 page → Revert → merge the revert. Vercel redeploys the old code, which runs fine on the migrated database (the migration is additive). |
-| Telegram flood | Disable the "Gmail sync" workflow (Actions → ⋯ → Disable workflow), then diagnose. |
-| The links look wrong and you want to start linking over | Run the SQL below, then `npm run link:history`. **It deletes every Application, including your overrides (stage, split, merge) and Review answers.** Your recorded corrections in `link_examples` stay but are not reapplied. Verified on an in-process Postgres. Emails and their data are untouched. |
+| Telegram flood | Pause all three sync triggers (section 4, "Pausing the sync"), then diagnose. |
+| The links look wrong and you want to start linking over | **First pause all three sync triggers** (once the new code is live, the sync also links history, 10 emails a run, and would race `link:history`). Run the SQL below, then `npm run link:history`, then start the triggers again. **It deletes every Application, including your overrides (stage, split, merge) and Review answers.** Your recorded corrections in `link_examples` stay but are not reapplied. The SQL resets the links only: what `link:history` wrote onto the emails (employer, company, role, via, round) stays, and only the step 1 backup undoes that. Tested on an in-process Postgres. |
 | Anything worse | Restore the step 1 backup. |
 
 ```sql
@@ -354,4 +377,4 @@ scripts/            the commands in section 4; preview-db.mts serves synthetic d
 docs/               this file, linking-scenarios.md, llm-limits-audit.md, agents/ (issue tracker, labels, domain)
 ```
 
-Try the app with no real data (synthetic mail, no secrets): in one terminal `npm run build`, then `npm run preview:db` and leave it running. In a second terminal set `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres`, `SESSION_SECRET=dev` and `OWNER_EMAIL=me@example.com` (PowerShell: `$env:DATABASE_URL="..."`; bash: `export ...`), then `npm run start`. Use `start`, not `dev`: the preview database serves one connection at a time.
+Looking at the app without real data: `npm run preview:db` serves synthetic mail from an in-process database, but the login needs Google, so you cannot click through it by hand. Ask Claude Code to start it and drive it with a signed test session. Do not start the app yourself next to a real `.env`: `npm run start` would read `DATABASE_URL` from it and connect to production.

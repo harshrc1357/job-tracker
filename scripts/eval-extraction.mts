@@ -7,7 +7,8 @@
 //      Costs about 100 LLM calls (~2 cents) and counts against the daily cap.
 //      Most stored mail is Applied, so a random sample holds few recruiter calls. To judge
 //      the Screening and Staffing/recruiter rules, sample the other categories instead:
-//        npm run eval:extraction -- --sample=150 --categories=Interview,Assessment,Offer,Reminder
+//        npm run eval:extraction -- --sample=150 '--categories=Interview,Assessment,Offer,Reminder'
+//      (quote the list: PowerShell splits an unquoted one at the commas)
 //   2. Open that file, and for each row fill "expected" (employer / role / round, null
 //      where the email states none). A row with expected left null-valued as a whole
 //      is skipped. Fill at least 50 for a meaningful number.
