@@ -24,7 +24,7 @@
     "db:secure:check": "node scripts/secure-database.mjs --check"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
+    "@neondatabase/serverless": "^1.2.1",
     "drizzle-orm": "^0.45.4",
     "googleapis": "^187.0.0",
     "jose": "^6.2.13",
