@@ -6,6 +6,22 @@ and sends Telegram reminders for the ones that need action.
 
 It is built for one owner. It is not a hosted service and does not accept other users.
 
+## Screenshots
+
+All companies, people and emails in these images are invented.
+
+**Pipeline:** each active Application and the stage it reached.
+
+![Pipeline screen with one card for each active Application and its stage](docs/images/pipeline.png)
+
+**Applications:** every Application, with filters.
+
+![Applications screen with a table of employers, roles, stages and dates](docs/images/applications.png)
+
+**Inbox:** a count for each category, and the emails themselves.
+
+![Inbox screen with category counts, a list of emails and one open email](docs/images/inbox.png)
+
 ## What it does
 
 - **Syncs** recent job-related mail from Gmail (the last 60 days by default).

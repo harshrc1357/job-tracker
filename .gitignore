@@ -5,6 +5,8 @@ node_modules/
 .env*
 !.env.example
 *.png
+# The exception: README screenshots, made from invented data only.
+!docs/images/*.png
 
 .vercel
 
