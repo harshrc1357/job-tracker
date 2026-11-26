@@ -27,16 +27,16 @@
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.45.4",
     "googleapis": "^187.0.0",
-    "jose": "^6.2.13",
+    "jose": "^6.2.18",
     "next": "^15.5.28",
     "postgres": "^3.4.9",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "sanitize-html": "^2.18.1"
+    "sanitize-html": "^2.18.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.11",
-    "@electric-sql/pglite-socket": "^0.2.14",
+    "@electric-sql/pglite": "^0.5.17",
+    "@electric-sql/pglite-socket": "^0.2.20",
     "@types/node": "^22.9.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -44,7 +44,7 @@
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",
     "typescript": "^5.6.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.1"
   },
   "overrides": {
     "next": {
