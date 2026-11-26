@@ -1,0 +1,339 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { applications } from "@/db/schema";
+import { CATEGORIES, CATEGORY_BADGE_CLASS, type Category } from "@/lib/categories";
+
+// Everything except bodyHtml. The server sends this shape for every row; the HTML
+// body is fetched one message at a time from /api/applications/[id] on click, because
+// shipping all of it up front was 87% of the page payload (see LIST_COLUMNS in
+// page.tsx).
+export type ApplicationListRow = Omit<typeof applications.$inferSelect, "bodyHtml" | "threadId" | "interviewRound" | "extractedAt" | "employer" | "via" | "linkConfidence" | "linkEvidence" | "classifiedBy" | "classifierEvidence" | "createdAt" | "gmailMessageId" | "lastReminderAt">;
+
+type Row = ApplicationListRow;
+type Tab = "All" | Category;
+
+const TABS: Tab[] = ["All", ...CATEGORIES];
+
+// Same soft/strong color pairing as the category badges (see CATEGORY_BADGE_CLASS),
+// applied to the list-item avatar instead. "Applied" has no modifier class — it
+// uses the plain .split-avatar default styling.
+function avatarClass(category: string): string {
+  switch (category) {
+    case "Screening":
+      return "split-avatar screening";
+    case "Assessment":
+      return "split-avatar assessment";
+    case "Interview":
+      return "split-avatar interview";
+    case "Offer":
+      return "split-avatar offer";
+    case "Rejection":
+      return "split-avatar rejection";
+    case "Reminder":
+      return "split-avatar reminder";
+    case "Staffing/recruiter":
+      return "split-avatar staffing";
+    case "Verification":
+      return "split-avatar verification";
+    default:
+      return "split-avatar";
+  }
+}
+
+// Which fields a search term is tested against. `body` is included so searching a
+// role title or a recruiter's name finds the email even when neither appears in the
+// subject line, which for ATS mail is most of the time. Plain substring matching on
+// a list the server already sent — 100-odd rows is nowhere near needing an index.
+function matchesQuery(row: Row, needle: string): boolean {
+  const haystacks = [row.company, row.role, row.subject, row.snippet, row.fromEmail, row.body];
+  return haystacks.some((field) => field?.toLowerCase().includes(needle));
+}
+
+function initials(company: string): string {
+  return company.trim().slice(0, 2).toUpperCase() || "?";
+}
+
+function formatShortDate(date: Date): string {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatFullDate(date: Date): string {
+  return new Date(date).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+// Where this email was filed. Stops propagation so following the link does not also
+// select the row.
+function LinkChip({ row, label }: { row: Row; label?: string }) {
+  const stop = (event: React.MouseEvent) => event.stopPropagation();
+  if (row.linkState === "linked" && row.jobApplicationId && label) {
+    return (
+      <a className={`link-chip ${row.linkFlagged ? "flagged" : ""}`} href={`/applications/${row.jobApplicationId}`} onClick={stop}>
+        → {label}
+        {row.linkFlagged ? " · check" : ""}
+      </a>
+    );
+  }
+  if (row.linkState === "review") {
+    return (
+      <a className="link-chip pending" href="/review" onClick={stop}>
+        → in review queue
+      </a>
+    );
+  }
+  return null;
+}
+
+// Wraps the sanitized email HTML in a minimal document so it renders isolated
+// from the dashboard's own CSS — the same reason Gmail itself puts message
+// bodies in an iframe. Inline styles and tables from the original email (which
+// is how almost every ATS/recruiting email is actually laid out) come through
+// untouched; this stylesheet only sets sane defaults for whatever the email
+// doesn't already specify.
+//
+// The CSP meta tag is the iframe's own rule, separate from the page's: it lets inline
+// styles through (emails depend on them) and nothing else, and it allows images only as
+// data: URIs. A remote image is a tracking pixel, which tells the sender when and from
+// which IP address the message was opened.
+const FRAME_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'";
+
+function buildFrameDoc(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}" />
+<base target="_blank" />
+<style>
+  html, body { margin: 0; padding: 16px; font-family: Inter, -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.6; color: #2D2A26; }
+  img { max-width: 100%; height: auto; }
+  a { color: #C2662D; }
+  table { max-width: 100%; }
+</style>
+</head><body>${html}</body></html>`;
+}
+
+// The dashboard's own font-family/colors don't apply inside an iframe, and
+// srcDoc content isn't in the DOM this component controls, so this stays a
+// plain uncontrolled iframe rather than trying to sync React state into it.
+//
+// The sandbox has no allow-scripts and no allow-same-origin: the email gets an opaque
+// origin of its own, so even content that slips past the sanitizer cannot read the
+// dashboard's cookies or storage. Nothing here reads the frame's document, so nothing
+// needs the same origin. allow-popups keeps links working (they open in a new tab).
+function EmailHtmlFrame({ html }: { html: string }) {
+  return (
+    <iframe className="email-frame" sandbox="allow-popups" srcDoc={buildFrameDoc(html)} title="Email content" />
+  );
+}
+
+// Fetches one email's HTML body on demand and remembers it for the rest of the page's
+// life, so clicking back and forth between two messages costs one request each, not
+// one per click.
+//
+// `null` html is a real answer, not a missing one: plenty of ATS senders post
+// text/plain only. The caller distinguishes "still loading" (undefined) from "loaded,
+// and there is no HTML" (null) so it can fall back to the plain text rather than
+// showing a spinner forever.
+function useEmailHtml(id: number | null): { html: string | null | undefined; failed: boolean } {
+  const [cache, setCache] = useState<Record<number, string | null>>({});
+  const [failed, setFailed] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (id === null || id in cache) return;
+
+    // Guards against a slow response for a message the user has already clicked away
+    // from overwriting the state for the one they are now looking at.
+    let cancelled = false;
+
+    fetch(`/api/applications/${id}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { bodyHtml: string | null }) => {
+        if (cancelled) return;
+        setCache((prev) => ({ ...prev, [id]: data.bodyHtml ?? null }));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // Not fatal. The plain-text body is already on the client, so the detail pane
+        // still shows the email — just without the original formatting.
+        console.error("[dashboard] failed to load email body", err);
+        setFailed((prev) => ({ ...prev, [id]: true }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, cache]);
+
+  if (id === null) return { html: undefined, failed: false };
+  return { html: cache[id], failed: failed[id] ?? false };
+}
+
+// Click an email in the list, read the whole thing on the right — same pattern as
+// any inbox. Filtering by category and picking an email are both client-side state
+// over data the server component already fetched, so this is the one interactive
+// piece of the dashboard and everything else stays a plain server component.
+export function ApplicationsPanel({
+  applications: rows,
+  appLabels = {},
+}: {
+  applications: Row[];
+  // Application id (job_applications.id, not an email's) -> "Employer · Role", for the link under each email.
+  appLabels?: Record<number, string>;
+}) {
+  const [activeTab, setActiveTab] = useState<Tab>("All");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+
+  // Search runs before the category filter, so the tab counts always describe what
+  // you'd actually get by clicking that tab with the current query in the box —
+  // rather than advertising 83 Applied and then showing you two.
+  const searched = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => matchesQuery(row, needle));
+  }, [rows, query]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { All: searched.length };
+    for (const cat of CATEGORIES) c[cat] = 0;
+    for (const row of searched) c[row.category] = (c[row.category] ?? 0) + 1;
+    return c;
+  }, [searched]);
+
+  const filtered = useMemo(
+    () => (activeTab === "All" ? searched : searched.filter((row) => row.category === activeTab)),
+    [searched, activeTab],
+  );
+
+  const selected = filtered.find((row) => row.id === selectedId) ?? null;
+  const { html: selectedHtml, failed: htmlFailed } = useEmailHtml(selected?.id ?? null);
+
+  function selectTab(tab: Tab) {
+    setActiveTab(tab);
+    setSelectedId(null);
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h2>All applications</h2>
+        <div className="head-controls">
+          <div className="search-box">
+            <span className="search-icon" aria-hidden="true">
+              ⌕
+            </span>
+            <input
+              type="search"
+              className="search-input"
+              placeholder="Search company, subject, sender…"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelectedId(null);
+              }}
+              aria-label="Search emails"
+            />
+            {query && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => {
+                  setQuery("");
+                  setSelectedId(null);
+                }}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`tab ${activeTab === tab ? "active" : ""}`}
+                onClick={() => selectTab(tab)}
+              >
+                {tab} ({counts[tab] ?? 0})
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="split-view">
+        <div className="split-list">
+          {filtered.length === 0 && (
+            <div className="empty-state">
+              {query.trim()
+                ? `Nothing matches “${query.trim()}”${activeTab === "All" ? "" : ` in ${activeTab}`}.`
+                : "No emails in this category yet."}
+            </div>
+          )}
+          {filtered.map((row) => (
+            <div
+              key={row.id}
+              className={`split-item ${selected?.id === row.id ? "active" : ""}`}
+              onClick={() => setSelectedId(row.id)}
+            >
+              <div className={avatarClass(row.category)}>{initials(row.company)}</div>
+              <div className="split-item-body">
+                <div className="split-item-top">
+                  <span className="company">{row.company}</span>
+                  <span className="date">{formatShortDate(row.receivedAt)}</span>
+                </div>
+                <div className="role">{row.role ?? row.subject}</div>
+                <div className="snippet">{row.snippet}</div>
+                <LinkChip row={row} label={row.jobApplicationId ? appLabels[row.jobApplicationId] : undefined} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="split-detail">
+          {!selected && <div className="detail-empty">Select an email on the left to read it.</div>}
+          {selected && (
+            <>
+              <div className="detail-head">
+                <span className={CATEGORY_BADGE_CLASS[selected.category as Category] ?? "badge applied"}>
+                  <span className="dot" />
+                  {selected.category}
+                </span>
+                <h3>{selected.subject ?? "(no subject)"}</h3>
+                <div className="detail-meta">
+                  <span className="from">{selected.company}</span>
+                  {selected.fromEmail ? ` · ${selected.fromEmail}` : ""}
+                  {" — "}
+                  {formatFullDate(selected.receivedAt)}
+                </div>
+              </div>
+              {/* The plain text is already on the client, so it renders immediately
+                  and is replaced by the original HTML the moment that arrives. No
+                  spinner and no empty pane: the worst case is you read the email
+                  unformatted for a few hundred milliseconds, or permanently if the
+                  fetch fails. */}
+              {selectedHtml ? (
+                <EmailHtmlFrame key={selected.id} html={selectedHtml} />
+              ) : (
+                <div className="detail-body">
+                  {selected.body?.trim() || selected.snippet || "No content synced for this email."}
+                  {selectedHtml === undefined && !htmlFailed && (
+                    <div className="detail-loading">Loading the formatted email…</div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

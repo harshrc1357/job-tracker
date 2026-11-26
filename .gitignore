@@ -1,0 +1,39 @@
+node_modules/
+.next/
+.next-stale-*/
+*.tsbuildinfo
+.env*
+!.env.example
+*.png
+
+.vercel
+
+# Local sync trigger artifacts
+sync-trigger.log
+sync-last-response.json
+
+# Row snapshots taken before a repair overwrites stored rows.
+backups/
+
+# Backfill run logs
+logs/
+
+# A pg_dump holds every email body and the Gmail refresh token.
+*.dump
+
+# Mailbox exports and scratch work. exports/applications.csv is the whole inbox, and this
+# repository is public: a committed copy cannot be taken back.
+exports/
+workspace/
+*.csv
+
+# Private keys and certificates, per-machine Claude Code settings, browser test profile.
+*.pem
+*.key
+.claude/settings.local.json
+.playwright-mcp/
+
+# AI assistant notes and skills stay on the developer's machine.
+CLAUDE.md
+docs/agents/
+.claude/skills/

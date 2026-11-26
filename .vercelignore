@@ -1,0 +1,23 @@
+# When this file exists, the Vercel CLI uses it INSTEAD of .gitignore. So everything that
+# must never be uploaded by `vercel deploy` has to be named here, not only there.
+node_modules
+.next
+.next-stale-*
+*.tsbuildinfo
+*.png
+.git
+.playwright-mcp
+
+# Secrets. `.env*` covers .env, .env.local and backups such as .env.backup-pre-supabase.
+.env*
+.claude/settings.local.json
+
+# Mailbox data: a pg_dump or an export holds every email body and the Gmail refresh token.
+*.dump
+*.csv
+backups
+exports
+logs
+workspace
+sync-trigger.log
+sync-last-response.json

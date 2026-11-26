@@ -1,0 +1,54 @@
+{
+  "name": "job-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "backfill": "tsx --env-file=.env scripts/backfill.mts",
+    "backfill:threads": "tsx --env-file=.env scripts/backfill-thread-id.mts",
+    "migrate:linking": "node --env-file=.env scripts/migrate-linking.mjs",
+    "migrate:retry-limit": "node --env-file=.env scripts/migrate-retry-limit.mjs",
+    "eval:extraction": "tsx --env-file=.env scripts/eval-extraction.mts",
+    "link:history": "tsx --env-file=.env scripts/link-history.mts",
+    "preview:db": "tsx scripts/preview-db.mts",
+    "backfill:bg": "scripts\\backfill.cmd",
+    "db:secure": "node scripts/secure-database.mjs",
+    "db:secure:check": "node scripts/secure-database.mjs --check"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.45.4",
+    "googleapis": "^187.0.0",
+    "jose": "^6.2.13",
+    "next": "^15.5.28",
+    "postgres": "^3.4.9",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sanitize-html": "^2.18.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/sanitize-html": "^2.16.2",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3",
+    "vitest": "^5.0.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.31"
+    }
+  }
+}

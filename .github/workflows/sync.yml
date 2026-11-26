@@ -1,0 +1,32 @@
+name: Gmail sync
+
+# Vercel's Hobby plan hard-caps native cron at once a day (deploy-time rejects
+# anything more frequent), so the 5-minute trigger lives here instead — GitHub
+# Actions schedules go down to 1-minute granularity for free.
+#
+# Requires this repo to have a CRON_SECRET repository secret matching the one
+# in job-tracker's .env / Vercel env vars (Settings > Secrets and variables >
+# Actions). GitHub's schedule is best-effort and can lag a few minutes under
+# platform load, but there's no cheaper way to get near-real-time polling.
+#
+# This repository is public, and so are its Actions logs. Two things follow:
+#   - the secret goes in an Authorization header, not the URL, so it never lands in a
+#     request log;
+#   - the response is discarded (-o /dev/null). A caller that holds the secret gets
+#     counts and error text back, and that must not be printed to a public log.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger job-tracker sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS -o /dev/null -H "Authorization: Bearer $CRON_SECRET" "https://job-tracker-sage-eta.vercel.app/api/sync"

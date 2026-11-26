@@ -1,0 +1,747 @@
+:root {
+  --bg: #f7f5f0;
+  --card: #ffffff;
+  --ink: #2d2a26;
+  --ink-soft: #6b665f;
+  --border: #e8e4da;
+  --coral: #c2662d;
+  --coral-soft: #f3e3d3;
+  --green: #3e6b4f;
+  --green-soft: #e1ede4;
+  --blue: #35597a;
+  --blue-soft: #e1e9f0;
+  --gold: #a9832a;
+  --gold-soft: #f3ead3;
+  --red: #a23b32;
+  --red-soft: #f3deda;
+  --violet: #6b4e9c;
+  --violet-soft: #e9e3f2;
+  --grey: #7a756c;
+  --grey-soft: #ece9e2;
+  --teal: #2f6b6b;
+  --teal-soft: #dcecea;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Inter, -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+.title-block h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.title-block p {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin-top: 4px;
+}
+.status-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.status-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+@media (max-width: 900px) {
+  .stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(30, 25, 15, 0.04);
+}
+.stat-card .num {
+  font-size: 28px;
+  font-weight: 700;
+}
+.stat-card .label {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+.stat-card.screening .num {
+  color: var(--blue);
+}
+.stat-card.assessment .num {
+  color: var(--gold);
+}
+.stat-card.interview .num {
+  color: var(--blue);
+}
+.stat-card.offer .num {
+  color: var(--green);
+}
+.stat-card.rejection .num {
+  color: var(--red);
+}
+.stat-card.reminders .num {
+  color: var(--coral);
+}
+.stat-card.verification .num {
+  color: var(--teal);
+}
+.stat-card.staffing .num {
+  color: var(--coral);
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(30, 25, 15, 0.05);
+  overflow: hidden;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-head h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.table-scroll {
+  max-height: 640px;
+  overflow-y: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  background: var(--card);
+}
+td {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: middle;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+.company {
+  font-weight: 600;
+}
+.role {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge.applied {
+  background: var(--grey-soft);
+  color: var(--grey);
+}
+.badge.assessment {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+.badge.interview {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.badge.offer {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.badge.rejection {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.badge.reminder {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+.badge.verification {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.badge.staffing {
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+.badge.ghosted {
+  background: var(--grey-soft);
+  color: var(--grey);
+  margin-left: 8px;
+}
+.badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.date {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.bell {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stack-y {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.side-card {
+  padding: 22px 24px;
+}
+.side-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+/* Search box + category pills share the right-hand side of the panel head. They
+   wrap onto their own lines on a narrow screen rather than squeezing the title. */
+.head-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  min-width: 240px;
+}
+.search-box:focus-within {
+  border-color: var(--coral);
+  background: var(--card);
+}
+.search-icon {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1;
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.search-input::placeholder {
+  color: var(--ink-soft);
+}
+/* Chrome renders its own clear affordance on type="search" — hide it, we ship one
+   that matches the rest of the palette. */
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-clear {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  font-family: inherit;
+}
+.search-clear:hover {
+  color: var(--ink);
+}
+
+/* Category filter pills in a panel-head, e.g. "All / Applied / Interview ...". */
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+.tab:hover:not(.active) {
+  background: var(--grey-soft);
+}
+.tab.active {
+  background: var(--coral-soft);
+  color: var(--coral);
+  font-weight: 600;
+}
+
+/* Two-pane list + detail view, the same shape as clicking an email in a normal
+   inbox. .split-list is the scrollable left rail, .split-detail is the reading
+   pane on the right. */
+.split-view {
+  display: flex;
+  height: 640px;
+}
+.split-list {
+  width: 340px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.split-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  align-items: flex-start;
+}
+.split-item:hover {
+  background: var(--bg);
+}
+.split-item.active {
+  background: var(--coral-soft);
+}
+.split-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+  background: var(--grey-soft);
+  color: var(--grey);
+}
+.split-avatar.screening {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.split-avatar.assessment {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+.split-avatar.interview {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.split-avatar.offer {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.split-avatar.rejection {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.split-avatar.reminder {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+.split-avatar.verification {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.split-avatar.staffing {
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+.split-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.split-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.split-item-top .company {
+  font-weight: 600;
+  font-size: 14px;
+}
+.split-item-top .date {
+  flex-shrink: 0;
+}
+.split-item .role {
+  margin-top: 1px;
+}
+.split-item .snippet {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.split-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-align: center;
+}
+.detail-head {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-head h3 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 12px;
+}
+.detail-meta {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.detail-meta .from {
+  color: var(--ink);
+  font-weight: 600;
+}
+.detail-body {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+/* Shown under the plain-text body while the formatted version is still in flight.
+   The text above it is already readable, so this is a note rather than a spinner —
+   it says "there is more coming", not "you cannot read this yet". */
+.detail-loading {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+/* The sandboxed email-content iframe (see EmailHtmlFrame in ApplicationsPanel.tsx).
+   Fixed height + its own scrollbar, same "bounded panel, internal scroll" pattern
+   as .split-list and the old .table-scroll — the email can be any length, the
+   surrounding layout doesn't move. */
+.email-frame {
+  width: 100%;
+  height: 560px;
+  border: none;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .split-view {
+    flex-direction: column;
+    height: auto;
+  }
+  .split-list {
+    width: 100%;
+    max-height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .split-detail {
+    max-height: 480px;
+  }
+}
+
+/* Upcoming reminders now gets its own full-width panel instead of a narrow
+   sidebar squeezed next to the applications table, so cards lay out in a
+   responsive grid rather than a single cramped column. */
+.reminders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.reminder-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.reminder-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.reminder-icon.i {
+  background: var(--blue-soft);
+}
+.reminder-icon.a {
+  background: var(--gold-soft);
+}
+.reminder-icon.o {
+  background: var(--green-soft);
+}
+.reminder-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.reminder-sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.empty-state {
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+.login-shell {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(30, 25, 15, 0.05);
+  padding: 40px 36px;
+  text-align: center;
+}
+.login-mark {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 20px;
+  border-radius: 14px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+.login-card h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.login-card > p.login-sub {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-google:hover {
+  border-color: var(--coral);
+  box-shadow: 0 1px 2px rgba(30, 25, 15, 0.06);
+}
+.login-foot {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* ---------- Application views: tabs, pipeline, applications, detail, review ---------- */
+.topbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.nav-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
+.nav-tab { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; color: var(--ink-soft); text-decoration: none; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap; }
+.nav-tab:hover { color: var(--ink); }
+.nav-tab.active { color: var(--ink); border-bottom-color: var(--coral); }
+.nav-count { background: var(--grey-soft); color: var(--grey); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+.nav-tab.active .nav-count { background: var(--coral-soft); color: var(--coral); }
+.nav-count.attn { background: var(--gold-soft); color: var(--gold); }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.chip { padding: 7px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--ink-soft); font-size: 13px; text-decoration: none; }
+.chip:hover { color: var(--ink); }
+.chip.active { background: var(--coral-soft); border-color: var(--coral); color: var(--coral); font-weight: 600; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+.pcard { display: block; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--grey); border-radius: 16px; padding: 18px 20px; text-decoration: none; color: inherit; box-shadow: 0 1px 3px rgba(30, 25, 15, 0.05); }
+.pcard:hover { border-color: var(--ink-soft); }
+.pcard.s-screening { border-left-color: var(--blue); }
+.pcard.s-assessment { border-left-color: var(--gold); }
+.pcard.s-interview { border-left-color: var(--green); }
+.pcard.s-offer { border-left-color: var(--violet); }
+.pcard.closed { opacity: 0.65; border-left-color: var(--red); }
+.pcard .employer { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+.pcard h3 { font-size: 17px; margin: 4px 0 10px; letter-spacing: -0.01em; }
+.stepper { display: flex; align-items: center; margin: 14px 0 6px; }
+.step { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; font-size: 11px; color: var(--ink-soft); }
+.step::before { content: ""; position: absolute; top: 5px; left: -50%; right: 50%; height: 2px; background: var(--border); }
+.step:first-child::before { display: none; }
+.step .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); z-index: 1; margin-bottom: 6px; }
+.step.done .dot, .step.done::before { background: var(--green); }
+.step.now .dot { background: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
+.step.now::before { background: var(--green); }
+.pcard .meta { font-size: 13px; color: var(--ink-soft); margin-top: 8px; }
+.pcard .meta b { color: var(--ink); font-weight: 600; }
+.pcard .flag { color: var(--gold); font-weight: 600; }
+.badge.screening { background: var(--blue-soft); color: var(--blue); }
+
+.table-link { color: inherit; text-decoration: none; }
+.table-link:hover { text-decoration: underline; }
+td.dim, .dim { color: var(--ink-soft); }
+.muted-row td { color: var(--ink-soft); }
+
+.link-chip { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--blue); text-decoration: none; }
+.link-chip:hover { text-decoration: underline; }
+.link-chip.flagged { color: var(--gold); }
+.link-chip.pending { color: var(--coral); }
+
+.detail-wrap { padding: 24px; }
+.detail-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.confidence { text-align: right; }
+.confidence .num { font-size: 28px; font-weight: 700; color: var(--green); }
+.confidence.low .num { color: var(--gold); }
+.timeline { list-style: none; margin: 24px 0; padding: 0 0 0 4px; }
+.tl-item { position: relative; padding: 0 0 22px 28px; border-left: 2px solid var(--border); margin-left: 6px; }
+.tl-item:last-child { border-left-color: transparent; }
+.tl-item::before { content: ""; position: absolute; left: -8px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--grey); }
+.tl-item.k-Interview::before { background: var(--green); }
+.tl-item.k-Assessment::before { background: var(--gold); }
+.tl-item.k-Offer::before { background: var(--violet); }
+.tl-item.k-Rejection::before { background: var(--red); }
+.tl-item.k-Applied::before { background: var(--blue); }
+.tl-item.k-Screening::before { background: var(--teal); }
+/* The label has a slash, which a class selector has to escape. */
+.tl-item.k-Staffing\/recruiter::before { background: var(--coral); }
+.tl-title { font-weight: 600; }
+.tl-sub { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+.overrides { border-top: 1px solid var(--border); padding-top: 20px; display: grid; gap: 14px; }
+.overrides h4 { font-size: 14px; }
+.row-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row-form select, .row-form input[type="text"] { padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 13px; }
+.btn { padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.btn:hover { border-color: var(--ink-soft); }
+.btn.primary { background: var(--coral-soft); border-color: var(--coral); color: var(--coral); font-weight: 600; }
+.btn.danger { color: var(--red); }
+.tl-actions { display: inline-flex; gap: 8px; margin-left: 8px; }
+
+.review-list { display: grid; gap: 14px; }
+.review-card { background: var(--gold-soft); border: 1px solid var(--gold); border-radius: 16px; padding: 18px 20px; }
+.review-card h3 { font-size: 15px; margin-bottom: 4px; }
+.review-card .why { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ink-soft); margin: 10px 0 12px; }
+.review-card .choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.ladder { width: 100%; margin-bottom: 20px; }
